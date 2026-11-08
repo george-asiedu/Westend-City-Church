@@ -36,7 +36,7 @@ const schema = z.object({
   MAIL_FROM: z.string().default('WCC Media <no-reply@example.org>'),
   MAIL_REPLY_TO: z.string().optional(),
   /** Public https URL of the logo for emails. Defaults to WEB_ORIGIN/logo.png when that is https. */
-  MAIL_LOGO_URL: z.string().url().optional(),
+  MAIL_LOGO_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
   APP_NAME: z.string().default('WCC Media — The Life Cathedral'),
 });
 
