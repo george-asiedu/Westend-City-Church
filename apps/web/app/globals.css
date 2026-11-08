@@ -1,0 +1,232 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Brand tokens: drop the church colours in here (§11.2). */
+:root {
+  --brand: #c8102e;
+  --brand-fg: #ffffff;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --fg: #15171c;
+  --muted: #5c6370;
+  --border: #dde1e8;
+  --danger: #c62828;
+  --success: #1b7f3b;
+  --warning: #a35b00;
+  --radius: 12px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --brand: #ff5a6e;
+    --brand-fg: #0b1020;
+    --bg: #0e1015;
+    --surface: #161921;
+    --surface-2: #1e222c;
+    --fg: #eceef3;
+    --muted: #9aa1ad;
+    --border: #2a2f3a;
+    --danger: #ff6b6b;
+    --success: #4cc27a;
+    --warning: #f0a33a;
+    color-scheme: dark;
+  }
+}
+:root.dark {
+  --brand: #ff5a6e;
+  --brand-fg: #0b1020;
+  --bg: #0e1015;
+  --surface: #161921;
+  --surface-2: #1e222c;
+  --fg: #eceef3;
+  --muted: #9aa1ad;
+  --border: #2a2f3a;
+  --danger: #ff6b6b;
+  --success: #4cc27a;
+  --warning: #f0a33a;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --radius-app: var(--radius);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  min-height: 100dvh;
+}
+
+/* Inputs at 16px so iOS does not zoom on focus. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+@media (min-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 14px;
+  }
+}
+
+/* Hover styles only where hover exists (no sticky hover on phones). */
+@media (hover: none) {
+  .hover-only {
+    display: none;
+  }
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Uploader (Uppy Dashboard) in the app's colours ─────────────────────── */
+.wcc-uploader .uppy-Dashboard-inner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-family: inherit;
+}
+.wcc-uploader .uppy-Dashboard-innerWrap { border-radius: var(--radius); }
+.wcc-uploader .uppy-Dashboard-AddFiles {
+  margin: 12px;
+  height: calc(100% - 24px);
+  border: 2px dashed color-mix(in srgb, var(--muted) 45%, var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--bg);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.wcc-uploader .uppy-Dashboard-AddFiles:hover,
+.wcc-uploader .uppy-Dashboard--isDraggingOver .uppy-Dashboard-AddFiles {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 6%, var(--bg));
+}
+.wcc-uploader .uppy-Dashboard-AddFiles::before {
+  /* upload-cloud icon above the prompt */
+  content: '';
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--brand) 12%, transparent)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' fill='none' stroke='%23c8102e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='M12 13v8'/%3E%3Cpath d='M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2'/%3E%3Cpath d='m8 17 4-4 4 4'/%3E%3C/svg%3E")
+    center no-repeat;
+}
+.wcc-uploader .uppy-Dashboard-AddFiles-title {
+  color: var(--fg);
+  font-size: 1.05rem;
+  font-weight: 500;
+  max-width: 34rem;
+  line-height: 1.5;
+}
+.wcc-uploader .uppy-Dashboard-browse { color: var(--brand); font-weight: 600; }
+.wcc-uploader .uppy-Dashboard-browse:hover,
+.wcc-uploader .uppy-Dashboard-browse:focus { border-bottom-color: var(--brand); }
+.wcc-uploader .uppy-Dashboard-note { color: var(--muted); font-size: 0.8rem; }
+
+/* Top bar: Cancel · N files selected · Add more */
+.wcc-uploader .uppy-DashboardContent-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+}
+.wcc-uploader .uppy-DashboardContent-title { color: var(--fg); font-weight: 600; }
+.wcc-uploader .uppy-DashboardContent-back,
+.wcc-uploader .uppy-DashboardContent-addMore { color: var(--brand); font-weight: 500; }
+.wcc-uploader .uppy-DashboardContent-back:hover,
+.wcc-uploader .uppy-DashboardContent-addMore:hover { color: var(--brand); opacity: 0.8; }
+.wcc-uploader .uppy-DashboardContent-addMore svg { fill: var(--brand); }
+
+/* File list */
+.wcc-uploader .uppy-Dashboard-files,
+.wcc-uploader .uppy-Dashboard-Item { background: var(--surface); }
+.wcc-uploader .uppy-Dashboard-Item { border-bottom-color: var(--border); }
+.wcc-uploader .uppy-Dashboard-Item-previewInnerWrap {
+  background: var(--surface-2) !important;
+  border-radius: 10px;
+  box-shadow: none;
+}
+.wcc-uploader .uppy-Dashboard-Item-name { color: var(--fg); font-weight: 500; }
+.wcc-uploader .uppy-Dashboard-Item-status { color: var(--muted); }
+.wcc-uploader .uppy-Dashboard-Item-action--remove { color: var(--muted); }
+.wcc-uploader .uppy-Dashboard-Item-action--remove:hover { color: var(--danger); }
+.wcc-uploader .uppy-Dashboard-Item-progressIndicator { color: var(--brand); }
+.wcc-uploader .uppy-Dashboard-Item.is-complete .uppy-Dashboard-Item-progressIndicator { color: var(--success); }
+.wcc-uploader .uppy-Dashboard-Item.is-error .uppy-Dashboard-Item-progressIndicator { color: var(--danger); }
+.wcc-uploader .uppy-Dashboard-dropFilesHereHint {
+  border-color: var(--brand);
+  border-radius: var(--radius);
+  color: var(--brand);
+  background-color: color-mix(in srgb, var(--surface) 92%, transparent);
+}
+
+/* Status bar: Upload button, progress, pause/resume */
+.wcc-uploader .uppy-StatusBar,
+.wcc-uploader .uppy-StatusBar-actions,
+.wcc-uploader .uppy-StatusBar.is-waiting .uppy-StatusBar-actions {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  color: var(--fg);
+}
+.wcc-uploader .uppy-StatusBar-progress { background-color: var(--brand); }
+.wcc-uploader .uppy-StatusBar.is-complete .uppy-StatusBar-progress { background-color: var(--success); }
+.wcc-uploader .uppy-StatusBar.is-error .uppy-StatusBar-progress { background-color: var(--danger); }
+.wcc-uploader .uppy-StatusBar-statusPrimary { color: var(--fg); }
+.wcc-uploader .uppy-StatusBar-statusSecondary { color: var(--muted); }
+.wcc-uploader .uppy-StatusBar-actionBtn--upload,
+.wcc-uploader .uppy-StatusBar.is-waiting .uppy-StatusBar-actionBtn--upload,
+.wcc-uploader .uppy-StatusBar.is-waiting .uppy-StatusBar-actionBtn--upload:hover,
+.wcc-uploader .uppy-StatusBar.is-waiting .uppy-StatusBar-actionBtn--upload:focus {
+  background-color: var(--brand);
+  color: var(--brand-fg);
+  border-radius: 8px;
+  font-weight: 600;
+  padding: 10px 22px;
+}
+.wcc-uploader .uppy-StatusBar-actionBtn--upload:hover { background: var(--brand); opacity: 0.9; }
+.wcc-uploader .uppy-StatusBar-actionBtn--retry { background: var(--danger); border-radius: 8px; }
+.wcc-uploader .uppy-StatusBar-actionCircleBtn svg { fill: var(--muted); }
+.wcc-uploader .uppy-StatusBar-spinner { fill: var(--brand); }
+.wcc-uploader .uppy-Informer p { background: var(--fg); color: var(--bg); border-radius: 8px; }

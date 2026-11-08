@@ -1,0 +1,94 @@
+name: Deploy API + worker (Contabo VPS)
+
+# main → the VPS shared with Nichelle and Zuri. The web app deploys to Vercel
+# on its own (Git integration). CI builds the release; infra/server/deploy.sh installs, backs up, migrates, switches,
+# health-checks and rolls back on its own. Setup: docs/DEPLOYMENT.md.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.API_URL }}
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - name: Check environment configuration
+        env:
+          HOST: ${{ vars.SSH_HOST }}
+          KNOWN: ${{ vars.SSH_KNOWN_HOSTS }}
+          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          API_URL: ${{ vars.API_URL }}
+        run: |
+          missing=()
+          [ -n "$HOST" ] || missing+=("SSH_HOST (variable)")
+          [ -n "$KNOWN" ] || missing+=("SSH_KNOWN_HOSTS (variable)")
+          [ -n "$KEY" ] || missing+=("SSH_PRIVATE_KEY (secret)")
+          [ -n "$API_URL" ] || missing+=("API_URL (variable)")
+          if [ ${#missing[@]} -gt 0 ]; then echo "::error::Missing: ${missing[*]}"; exit 1; fi
+
+      - uses: actions/checkout@v4
+        with: { ref: '${{ env.SHA }}' }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=@wcc/api --filter=@wcc/worker
+
+      # API + worker only (the web app deploys to Vercel). Compiled code +
+      # manifests; the server installs prod deps from the lockfile.
+      - name: Package release
+        run: |
+          set -euo pipefail
+          STAGE=release && rm -rf $STAGE && mkdir -p $STAGE
+          tar -cf - package.json pnpm-lock.yaml pnpm-workspace.yaml \
+            packages/*/package.json packages/*/dist packages/db/prisma packages/tsconfig \
+            apps/api/package.json apps/api/dist apps/worker/package.json apps/worker/dist apps/web/package.json \
+            infra/server | tar -xf - -C $STAGE
+          tar -czf "release-${SHA}.tgz" -C $STAGE .
+          ls -lh "release-${SHA}.tgz"
+
+      - name: Set up SSH
+        env:
+          KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          KNOWN: ${{ vars.SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<CONF
+          Host vps
+            HostName ${{ vars.SSH_HOST }}
+            User ${{ vars.SSH_USER || 'deploy' }}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          CONF
+
+      - name: Upload and activate
+        run: |
+          ssh vps 'mkdir -p ~/incoming-wcc'
+          scp "release-${SHA}.tgz" infra/server/deploy.sh vps:incoming-wcc/
+          ssh vps "bash ~/incoming-wcc/deploy.sh ${SHA} ~/incoming-wcc/release-${SHA}.tgz"
+
+      - name: Verify
+        run: curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "${{ vars.API_URL }}/api/v1/health/ready" | jq -e '.status == "ok"'
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

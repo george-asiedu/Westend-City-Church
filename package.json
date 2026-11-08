@@ -1,0 +1,26 @@
+{
+  "name": "wcc-media",
+  "private": true,
+  "packageManager": "pnpm@11.2.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @wcc/db generate",
+    "db:migrate": "pnpm --filter @wcc/db migrate:dev",
+    "db:deploy": "pnpm --filter @wcc/db migrate:deploy",
+    "db:seed": "pnpm --filter @wcc/db seed",
+    "format": "prettier --write .",
+    "dev:services": "docker compose -f infra/compose/docker-compose.dev.yml up -d"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.3"
+  }
+}

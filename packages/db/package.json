@@ -1,0 +1,31 @@
+{
+  "name": "@wcc/db",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "seed:prod": "node dist/prisma/seed.js",
+    "studio": "dotenv -e ../../.env -- prisma studio"
+  },
+  "prisma": { "schema": "prisma/schema.prisma", "seed": "tsx prisma/seed.ts" },
+  "dependencies": {
+    "@prisma/client": "^6.19.0",
+    "@wcc/shared": "workspace:*",
+    "argon2": "^0.44.0",
+    "prisma": "^6.19.0"
+  },
+  "devDependencies": {
+    "@wcc/tsconfig": "workspace:*",
+    "@types/node": "^22.18.0",
+    "dotenv-cli": "^10.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

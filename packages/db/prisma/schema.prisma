@@ -1,0 +1,387 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions", "fullTextSearchPostgres"]
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DATABASE_MIGRATION_URL")
+  extensions = [citext, pg_trgm]
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  MEDIA_ADMIN
+  MEDIA_TEAM
+  PASTOR
+  VIEWER
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum MediaStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum VariantKind {
+  THUMB
+  PREVIEW
+  POSTER
+  VIDEO_PREVIEW
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ExportStatus {
+  PENDING
+  RUNNING
+  READY
+  FAILED
+}
+
+// ───────────────────────── Identity ─────────────────────────
+
+model User {
+  id                String     @id @default(uuid()) @db.Uuid
+  email             String     @unique @db.Citext
+  fullName          String     @db.VarChar(120)
+  title             String?    @db.VarChar(40)
+  phone             String?    @db.VarChar(30)
+  role              Role       @default(VIEWER)
+  status            UserStatus @default(INVITED)
+  passwordHash      String?
+  passwordChangedAt DateTime?
+  totpSecretEnc     String?
+  totpEnabled       Boolean    @default(false)
+  failedLoginCount  Int        @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  avatarKey         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  sessions        Session[]
+  categoryAccess  UserCategoryAccess[]
+  eventsCreated   Event[]              @relation("EventCreatedBy")
+  mediaUploaded   MediaAsset[]         @relation("MediaUploadedBy")
+  invitationsSent Invitation[]         @relation("InvitedBy")
+  auditLogs       AuditLog[]
+  passwordResets  PasswordResetToken[]
+  recoveryCodes   RecoveryCode[]
+  shareLinks      ShareLink[]
+  exports         ExportJob[]
+
+  @@index([role])
+  @@index([status])
+}
+
+model Session {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId      String    @db.Uuid
+  refreshHash   String    @unique
+  userAgent     String?   @db.VarChar(400)
+  ipAddress     String?   @db.Inet
+  expiresAt     DateTime
+  absoluteExpiresAt DateTime
+  lastUsedAt    DateTime  @default(now())
+  revokedAt     DateTime?
+  revokedReason String?   @db.VarChar(60)
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+model Invitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  email       String    @db.Citext
+  role        Role
+  categoryIds String[]  @db.Uuid
+  tokenHash   String    @unique
+  invitedById String    @db.Uuid
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model RecoveryCode {
+  id       String    @id @default(uuid()) @db.Uuid
+  userId   String    @db.Uuid
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash String
+  usedAt   DateTime?
+
+  @@index([userId])
+}
+
+// ───────────────────────── Taxonomy ─────────────────────────
+
+model Category {
+  id             String   @id @default(uuid()) @db.Uuid
+  slug           String   @unique @db.VarChar(60)
+  name           String   @db.VarChar(80)
+  description    String?  @db.VarChar(500)
+  sortOrder      Int
+  allowsMultiDay Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  coverMediaId   String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  events     Event[]
+  userAccess UserCategoryAccess[]
+}
+
+model UserCategoryAccess {
+  userId     String   @db.Uuid
+  categoryId String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  canView    Boolean  @default(true)
+  canUpload  Boolean  @default(false)
+  canManage  Boolean  @default(false)
+  grantedAt  DateTime @default(now())
+  grantedBy  String?  @db.Uuid
+
+  @@id([userId, categoryId])
+}
+
+// ───────────────────────── Content ─────────────────────────
+
+model Event {
+  id           String      @id @default(uuid()) @db.Uuid
+  categoryId   String      @db.Uuid
+  category     Category    @relation(fields: [categoryId], references: [id])
+  title        String      @db.VarChar(160)
+  slug         String      @db.VarChar(180)
+  eventDate    DateTime    @db.Date
+  endDate      DateTime?   @db.Date
+  programType  String?     @db.VarChar(60)
+  location     String?     @db.VarChar(160)
+  description  String?     @db.Text
+  status       EventStatus @default(PUBLISHED)
+  coverMediaId String?     @db.Uuid
+  mediaCount   Int         @default(0)
+  photoCount   Int         @default(0)
+  videoCount   Int         @default(0)
+  totalBytes   BigInt      @default(0)
+  createdById  String      @db.Uuid
+  createdBy    User        @relation("EventCreatedBy", fields: [createdById], references: [id])
+  updatedById  String?     @db.Uuid
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+  deletedById  String?     @db.Uuid
+
+  media      MediaAsset[]
+  shareLinks ShareLink[]
+
+  @@unique([categoryId, eventDate, slug])
+  @@index([categoryId, eventDate(sort: Desc)])
+  @@index([eventDate])
+  @@index([deletedAt])
+}
+
+model MediaAsset {
+  id           String      @id @default(uuid()) @db.Uuid
+  eventId      String      @db.Uuid
+  event        Event       @relation(fields: [eventId], references: [id])
+  uploadedById String      @db.Uuid
+  uploadedBy   User        @relation("MediaUploadedBy", fields: [uploadedById], references: [id])
+  type         MediaType
+  status       MediaStatus @default(PENDING_UPLOAD)
+
+  originalFilename String  @db.VarChar(255)
+  originalKey      String  @unique
+  mimeType         String  @db.VarChar(100)
+  detectedMime     String? @db.VarChar(100)
+  isRaw            Boolean @default(false)
+  sizeBytes        BigInt
+  checksumSha256   String? @db.VarChar(64)
+  s3UploadId       String?
+
+  width       Int?
+  height      Int?
+  durationSec Decimal?  @db.Decimal(10, 2)
+  takenAt     DateTime?
+  cameraModel String?   @db.VarChar(120)
+
+  caption    String? @db.VarChar(1000)
+  isFeatured Boolean @default(false)
+  /// Shown on the public highlights gallery. Set only by admins (separate from
+  /// isFeatured so featuring inside the app never publishes anything).
+  isPublicHighlight Boolean @default(false)
+  sortOrder  Int     @default(0)
+
+  processingError    String? @db.VarChar(1000)
+  processingAttempts Int     @default(0)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  deletedById String?   @db.Uuid
+  purgeAfter  DateTime?
+
+  variants   MediaVariant[]
+  tags       MediaTag[]
+  shareItems ShareLinkMedia[]
+
+  @@index([eventId, status, deletedAt])
+  @@index([eventId, takenAt])
+  @@index([uploadedById])
+  @@index([status])
+  @@index([purgeAfter])
+  @@index([isPublicHighlight])
+}
+
+model MediaVariant {
+  id        String      @id @default(uuid()) @db.Uuid
+  mediaId   String      @db.Uuid
+  media     MediaAsset  @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  kind      VariantKind
+  key       String      @unique
+  mimeType  String      @db.VarChar(100)
+  width     Int?
+  height    Int?
+  sizeBytes BigInt
+  createdAt DateTime    @default(now())
+
+  @@unique([mediaId, kind])
+}
+
+model Tag {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String     @unique @db.Citext
+  createdAt DateTime   @default(now())
+  media     MediaTag[]
+}
+
+model MediaTag {
+  mediaId String     @db.Uuid
+  tagId   String     @db.Uuid
+  media   MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  tag     Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([mediaId, tagId])
+  @@index([tagId])
+}
+
+// ───────────────────────── Sharing & exports (§19) ─────────────────────────
+
+/// A time-limited link for people outside the system. Either a whole event
+/// (eventId set, media empty) or a hand-picked selection (media rows).
+model ShareLink {
+  id            String    @id @default(uuid()) @db.Uuid
+  tokenHash     String    @unique
+  /// First 8 chars of the token, so admins can tell links apart. Not secret enough to use.
+  tokenPrefix   String    @db.VarChar(8)
+  title         String    @db.VarChar(160)
+  eventId       String?   @db.Uuid
+  event         Event?    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  passwordHash  String?
+  allowDownload Boolean   @default(false)
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdById   String    @db.Uuid
+  createdBy     User      @relation(fields: [createdById], references: [id])
+  viewCount     Int       @default(0)
+  downloadCount Int       @default(0)
+  lastViewedAt  DateTime?
+  createdAt     DateTime  @default(now())
+
+  media ShareLinkMedia[]
+
+  @@index([eventId])
+  @@index([createdById])
+  @@index([expiresAt])
+}
+
+model ShareLinkMedia {
+  shareLinkId String     @db.Uuid
+  mediaId     String     @db.Uuid
+  shareLink   ShareLink  @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  media       MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([shareLinkId, mediaId])
+  @@index([mediaId])
+}
+
+/// ZIP export of an event or a selection, built by the worker into exports/.
+model ExportJob {
+  id            String       @id @default(uuid()) @db.Uuid
+  requestedById String?      @db.Uuid
+  requestedBy   User?        @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  shareLinkId   String?      @db.Uuid
+  eventId       String?      @db.Uuid
+  mediaIds      String[]     @db.Uuid
+  title         String       @db.VarChar(160)
+  status        ExportStatus @default(PENDING)
+  key           String?
+  fileCount     Int          @default(0)
+  sizeBytes     BigInt       @default(0)
+  error         String?      @db.VarChar(1000)
+  expiresAt     DateTime
+  createdAt     DateTime     @default(now())
+  completedAt   DateTime?
+
+  @@index([requestedById, createdAt(sort: Desc)])
+  @@index([shareLinkId])
+  @@index([expiresAt])
+}
+
+// ───────────────────────── Audit ─────────────────────────
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?  @db.Uuid
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String   @db.VarChar(60)
+  entityType String   @db.VarChar(30)
+  entityId   String?  @db.VarChar(64)
+  metadata   Json?
+  ipAddress  String?  @db.Inet
+  userAgent  String?  @db.VarChar(400)
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([action])
+}

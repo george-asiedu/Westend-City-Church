@@ -1,0 +1,8 @@
+{
+  "Rules": [
+    { "ID": "abort-incomplete-multipart", "Status": "Enabled", "Filter": { "Prefix": "" }, "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 3 } },
+    { "ID": "media-intelligent-tiering", "Status": "Enabled", "Filter": { "Prefix": "media/" }, "Transitions": [{ "Days": 0, "StorageClass": "INTELLIGENT_TIERING" }] },
+    { "ID": "expire-noncurrent", "Status": "Enabled", "Filter": { "Prefix": "" }, "NoncurrentVersionExpiration": { "NoncurrentDays": 30 } },
+    { "ID": "expire-exports", "Status": "Enabled", "Filter": { "Prefix": "exports/" }, "Expiration": { "Days": 2 } }
+  ]
+}

@@ -1,0 +1,7 @@
+# Dev-only helpers. Postgres is your local install (pgAdmin).
+name: wcc-dev
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["127.0.0.1:6379:6379"]

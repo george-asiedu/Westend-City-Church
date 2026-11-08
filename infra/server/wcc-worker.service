@@ -1,0 +1,50 @@
+# WCC Media worker: thumbnails (sharp), video posters/previews (ffmpeg),
+# ZIP exports, trash purge, email. Installed by setup.sh.
+[Unit]
+Description=WCC Media worker
+After=network-online.target redis-server.service
+Wants=network-online.target
+Requires=redis-server.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=wcc
+Group=wcc
+WorkingDirectory=/srv/wcc-media/current
+EnvironmentFile=/etc/wcc/app.env
+Environment=NODE_ENV=production
+Environment=WORKER_TMP_DIR=/var/lib/wcc/tmp
+ExecStart=/usr/bin/node --enable-source-maps apps/worker/dist/main.js
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+# The other apps' APIs must win the CPU: at most 2 of 4 cores, low priority,
+# and a hard memory ceiling so a big transcode can never OOM the box.
+Nice=10
+CPUQuota=200%
+IOSchedulingClass=idle
+MemoryMax=1536M
+MemoryHigh=1280M
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/wcc/tmp
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

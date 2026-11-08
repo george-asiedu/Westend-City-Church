@@ -1,0 +1,14 @@
+node_modules
+dist
+.next
+.next-dev
+.next-*
+.turbo
+coverage
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.pem
+packages/db/generated
+apps/web/next-env.d.ts
