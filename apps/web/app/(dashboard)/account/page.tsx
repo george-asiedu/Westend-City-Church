@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Monitor, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Copy, ExternalLink, Monitor, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { ROLE_LABELS, type MeResponse } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
@@ -73,13 +73,13 @@ function ChangePassword() {
 
 function TwoFactor({ me, highlight }: { me: MeResponse; highlight: boolean }) {
   const qc = useQueryClient();
-  const [setup, setSetup] = useState<{ qrDataUrl: string; secret: string } | null>(null);
+  const [setup, setSetup] = useState<{ qrDataUrl: string; otpauthUri: string; secret: string } | null>(null);
   const [code, setCode] = useState('');
   const [codes, setCodes] = useState<string[] | null>(null);
   const [disablePw, setDisablePw] = useState('');
   const [disableCode, setDisableCode] = useState('');
 
-  const start = useMutation({ mutationFn: () => api<{ qrDataUrl: string; secret: string }>('/auth/2fa/setup', { method: 'POST' }), onSuccess: setSetup, onError: (e) => toast.error(errorMessage(e)) });
+  const start = useMutation({ mutationFn: () => api<{ qrDataUrl: string; otpauthUri: string; secret: string }>('/auth/2fa/setup', { method: 'POST' }), onSuccess: setSetup, onError: (e) => toast.error(errorMessage(e)) });
   const enable = useMutation({
     mutationFn: () => api<{ recoveryCodes: string[] }>('/auth/2fa/enable', { method: 'POST', body: { totp: code } }),
     onSuccess: (r) => (setCodes(r.recoveryCodes), setSetup(null), void qc.invalidateQueries({ queryKey: qk.me })),
@@ -124,10 +124,42 @@ function TwoFactor({ me, highlight }: { me: MeResponse; highlight: boolean }) {
         </>
       ) : setup ? (
         <div className="space-y-3">
-          <p className="text-sm">Scan this with Google Authenticator, Microsoft Authenticator or 1Password, then enter the 6-digit code.</p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={setup.qrDataUrl} alt="QR code for your authenticator app" width={200} height={200} className="rounded-lg bg-white p-2" />
-          <p className="break-all text-xs text-muted">Or enter this key: {setup.secret}</p>
+          <p className="text-sm">
+            Add WCC Media to an authenticator app (Google Authenticator, Microsoft Authenticator or 1Password), then enter the 6-digit code it shows.
+          </p>
+          {/* On a phone the QR can't be scanned by the same phone: open the app directly instead. */}
+          <a
+            href={setup.otpauthUri}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-medium text-white hover:opacity-90 sm:hidden"
+          >
+            <ExternalLink className="h-4 w-4" /> Open in authenticator app
+          </a>
+          <div className="hidden sm:block">
+            <p className="mb-2 text-xs text-muted">Scan with your phone:</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={setup.qrDataUrl} alt="QR code for your authenticator app" width={200} height={200} className="rounded-lg bg-white p-2" />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted">Or add it by hand: choose “Enter a setup key”, account WCC Media, and paste this key (time-based):</p>
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 break-all rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm tracking-wider">
+                {setup.secret.match(/.{1,4}/g)?.join(' ')}
+              </code>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Copy setup key"
+                onClick={() =>
+                  navigator.clipboard.writeText(setup.secret).then(
+                    () => toast.success('Key copied'),
+                    () => toast.error('Copy failed — select the key and copy it'),
+                  )
+                }
+              >
+                <Copy className="h-4 w-4" /> Copy
+              </Button>
+            </div>
+          </div>
           <div className="flex gap-2">
             <Input inputMode="numeric" autoComplete="one-time-code" placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} className="max-w-40" />
             <Button loading={enable.isPending} onClick={() => enable.mutate()} disabled={code.length !== 6}>
