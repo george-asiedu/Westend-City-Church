@@ -75,12 +75,19 @@ systemctl daemon-reload
 systemctl enable wcc-api wcc-worker   # started by the first deploy
 
 log "Nginx"
-if [ ! -f /etc/nginx/sites-available/wcc-media.conf ]; then
-  sed -e "s/__API_DOMAIN__/${API_DOMAIN}/g" -e "s/__PROXY_SECRET__/${PROXY_SECRET}/g" "${HERE}/nginx/wcc-media.conf" > /etc/nginx/sites-available/wcc-media.conf
-  chmod 640 /etc/nginx/sites-available/wcc-media.conf   # contains the proxy secret
+SITE=/etc/nginx/sites-available/wcc-media.conf
+# Regenerate unless certbot has already added TLS to it.
+if [ ! -f "${SITE}" ] || ! grep -q 'managed by Certbot' "${SITE}"; then
+  sed -e "s/__API_DOMAIN__/${API_DOMAIN}/g" -e "s/__PROXY_SECRET__/${PROXY_SECRET}/g" "${HERE}/nginx/wcc-media.conf" > "${SITE}"
+  chmod 640 "${SITE}"   # contains the proxy secret
 fi
-ln -sf /etc/nginx/sites-available/wcc-media.conf /etc/nginx/sites-enabled/wcc-media.conf
-nginx -t
+ln -sf "${SITE}" /etc/nginx/sites-enabled/wcc-media.conf
+if ! nginx -t; then
+  # Never leave a broken site enabled: it would block reloads for the other apps.
+  rm -f /etc/nginx/sites-enabled/wcc-media.conf
+  echo "nginx test failed; wcc-media site disabled, other sites untouched." >&2
+  exit 1
+fi
 systemctl reload nginx
 
 log "Done"
