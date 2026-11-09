@@ -72,6 +72,13 @@ body {
   color: var(--fg);
 }
 
+/* Never scroll sideways on any device. `clip` (unlike `hidden`) keeps the sticky header working. */
+html,
+body {
+  overflow-x: clip;
+  max-width: 100%;
+}
+
 body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;

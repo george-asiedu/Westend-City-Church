@@ -41,7 +41,7 @@ function SearchInner() {
   return (
     <>
       <PageHeader title="Search" />
-      <div className="mb-6 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5 [&>*]:min-w-0">
         <Input className="lg:col-span-2" autoFocus placeholder="Titles, captions, file names, tags…" value={q} onChange={(e) => setQ(e.target.value)} />
         <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Folder">
           <option value="">All folders</option>
@@ -56,9 +56,9 @@ function SearchInner() {
           <option value="IMAGE">Photos</option>
           <option value="VIDEO">Videos</option>
         </Select>
-        <div className="flex gap-2">
-          <Input type="date" aria-label="From" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <Input type="date" aria-label="To" value={to} onChange={(e) => setTo(e.target.value)} />
+        <div className="flex min-w-0 gap-2">
+          <Input type="date" className="flex-1" aria-label="From" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <Input type="date" className="flex-1" aria-label="To" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
       </div>
       {debounced.length < 2 ? (
