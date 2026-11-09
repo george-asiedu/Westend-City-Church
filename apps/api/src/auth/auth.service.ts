@@ -150,6 +150,67 @@ export class AuthService {
     await this.audit.record({ actorId: u.id, action: 'PASSWORD_CHANGED', entityType: 'USER', entityId: u.id, meta });
   }
 
+  /** Starts an email change: a link goes to the new address, a heads-up to the old one. */
+  async requestEmailChange(user: AuthUser, newEmail: string, password: string, meta: ReqMeta): Promise<{ pendingEmail: string; expiresAt: Date }> {
+    const u = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    if (!(await this.passwords.verify(u.passwordHash, password))) throw badRequest('WRONG_PASSWORD', 'Password is incorrect');
+    if (newEmail === u.email.toLowerCase()) throw badRequest('SAME_EMAIL', 'That is already your email address');
+    if (!(await this.hit(`email-change:${u.id}`, 5, 3600))) throw new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', 'Too many attempts. Try again in an hour.');
+    if (await this.prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } }))
+      throw badRequest('EMAIL_TAKEN', 'That email address is already used by another account');
+    const token = randomToken();
+    const expiresAt = new Date(Date.now() + 60 * 60_000);
+    await this.prisma.$transaction([
+      this.prisma.emailChangeToken.deleteMany({ where: { userId: u.id, usedAt: null } }),
+      this.prisma.emailChangeToken.create({ data: { userId: u.id, newEmail, tokenHash: sha256(token), expiresAt } }),
+    ]);
+    await this.queue.mail({
+      to: newEmail,
+      template: 'email-change-verify',
+      data: { name: u.fullName, newEmail, link: `${this.env.WEB_ORIGIN}/verify-email/${token}` },
+    });
+    await this.queue.mail({ to: u.email, template: 'email-change-requested', data: { name: u.fullName, newEmail } });
+    await this.audit.record({ actorId: u.id, action: 'EMAIL_CHANGE_REQUESTED', entityType: 'USER', entityId: u.id, meta, metadata: { newEmail } });
+    return { pendingEmail: newEmail, expiresAt };
+  }
+
+  async pendingEmailChange(user: AuthUser): Promise<{ pendingEmail: string; expiresAt: Date } | null> {
+    const row = await this.prisma.emailChangeToken.findFirst({
+      where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return row ? { pendingEmail: row.newEmail, expiresAt: row.expiresAt } : null;
+  }
+
+  async cancelEmailChange(user: AuthUser): Promise<void> {
+    await this.prisma.emailChangeToken.deleteMany({ where: { userId: user.id, usedAt: null } });
+  }
+
+  /** Public: the link may be opened on another device. Signs out every session. */
+  async verifyEmailChange(token: string, meta: ReqMeta): Promise<{ email: string }> {
+    const row = await this.prisma.emailChangeToken.findUnique({ where: { tokenHash: sha256(token) }, include: { user: true } });
+    if (!row || row.usedAt || row.expiresAt < new Date() || row.user.status !== 'ACTIVE')
+      throw badRequest('TOKEN_INVALID', 'This link is invalid or has expired');
+    const oldEmail = row.user.email;
+    try {
+      await this.prisma.$transaction([
+        this.prisma.emailChangeToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
+        this.prisma.emailChangeToken.deleteMany({ where: { userId: row.userId, usedAt: null, id: { not: row.id } } }),
+        this.prisma.user.update({ where: { id: row.userId }, data: { email: row.newEmail } }),
+      ]);
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2002') throw badRequest('EMAIL_TAKEN', 'That email address is already used by another account');
+      throw e;
+    }
+    await this.sessions.revokeAllForUser(row.userId, 'EMAIL_CHANGE');
+    await this.queue.mail({ to: oldEmail, template: 'email-changed', data: { name: row.user.fullName, newEmail: row.newEmail } });
+    await this.audit.record({
+      actorId: row.userId, action: 'EMAIL_CHANGED', entityType: 'USER', entityId: row.userId, meta,
+      metadata: { from: oldEmail, to: row.newEmail },
+    });
+    return { email: row.newEmail };
+  }
+
   async setup2fa(user: AuthUser) {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     if (u.totpEnabled) throw badRequest('TOTP_ALREADY_ENABLED', 'Two-factor authentication is already on');

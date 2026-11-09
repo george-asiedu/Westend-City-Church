@@ -68,3 +68,16 @@ describe('sharing', () => {
     expect(p.canShareEvent(user('MEDIA_TEAM', manage), ev)).toBe(true);
   });
 });
+
+describe('role permissions', () => {
+  const withPerm = (role: Role) => ({ ...user(role), rolePermissions: new Set(['MANAGE_CATEGORIES']) });
+  it('only Super Admin manages folders by default', () => {
+    expect(ROLES.map((r) => p.canManageCategories(user(r)))).toEqual([true, false, false, false, false]);
+  });
+  it('a granted role can manage folders', () => {
+    expect(ROLES.map((r) => p.canManageCategories(withPerm(r)))).toEqual([true, true, true, true, true]);
+  });
+  it('only Super Admin edits role permissions, even with grants', () => {
+    expect(ROLES.map((r) => p.canManageRolePermissions(withPerm(r)))).toEqual([true, false, false, false, false]);
+  });
+});

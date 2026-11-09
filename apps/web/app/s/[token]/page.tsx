@@ -1,5 +1,6 @@
 'use client';
 
+import { toast } from 'sonner';
 import { use, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Lightbox, { type Slide } from 'yet-another-react-lightbox';
@@ -51,7 +52,8 @@ function ZipButton({ token }: { token: string }) {
   const [exportId, setExportId] = useState<string | null>(null);
   const start = useMutation({
     mutationFn: () => api<{ exportId: string }>(`/public/shares/${token}/zip`, { method: 'POST', anonymous: true }),
-    onSuccess: (r) => setExportId(r.exportId),
+    onSuccess: (r) => (setExportId(r.exportId), toast.info('Preparing your ZIP. This can take a few minutes.')),
+    onError: (e) => toast.error(errorMessage(e)),
   });
   const status = useQuery({
     queryKey: ['share-zip', exportId],
@@ -91,7 +93,8 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   });
   const unlock = useMutation({
     mutationFn: () => api(`/public/shares/${token}/unlock`, { method: 'POST', anonymous: true, body: { password } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['share', token] }),
+    onSuccess: () => (toast.success('Unlocked'), qc.invalidateQueries({ queryKey: ['share', token] })),
+    onError: (e) => toast.error(errorMessage(e)),
   });
 
   if (view.isLoading) return <PageLoader />;

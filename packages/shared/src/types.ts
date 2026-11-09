@@ -28,6 +28,7 @@ export interface MeResponse {
     canUploadAnywhere: boolean;
     canInvite: boolean;
     canManageCategories: boolean;
+    canManageRolePermissions: boolean;
     canViewAudit: boolean;
     canPurge: boolean;
   };

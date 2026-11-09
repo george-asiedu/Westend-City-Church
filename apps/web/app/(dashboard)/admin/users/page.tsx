@@ -229,7 +229,12 @@ export default function UsersPage() {
                 <Button size="sm" variant="ghost" title="Resend" onClick={() => api(`/invitations/${i.id}/resend`, { method: 'POST' }).then(() => (toast.success('Resent'), qc.invalidateQueries({ queryKey: qk.invitations })))}>
                   <RefreshCw className="h-4 w-4" />
                 </Button>
-                <Button size="sm" variant="ghost" title="Revoke" onClick={() => api(`/invitations/${i.id}`, { method: 'DELETE' }).then(() => qc.invalidateQueries({ queryKey: qk.invitations }))}>
+                <Button size="sm" variant="ghost" title="Revoke" onClick={() =>
+                    api(`/invitations/${i.id}`, { method: 'DELETE' }).then(
+                      () => (toast.success(`Invitation to ${i.email} revoked`), qc.invalidateQueries({ queryKey: qk.invitations })),
+                      (e) => toast.error(errorMessage(e)),
+                    )
+                  }>
                   <X className="h-4 w-4" />
                 </Button>
               </div>

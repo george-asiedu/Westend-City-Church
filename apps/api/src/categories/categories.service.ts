@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PolicyService } from '../policy/policy.service';
 import { AuditService } from '../audit/audit.service';
 import { MediaMapper } from '../media/media-mapper.service';
-import { forbidden, notFound } from '../common/errors';
+import { badRequest, forbidden, notFound } from '../common/errors';
 import { fromDateOnly } from '../common/pagination';
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
@@ -19,8 +19,8 @@ export class CategoriesService {
   ) {}
 
   async list(user: AuthUser): Promise<CategoryDto[]> {
-    const isAdmin = this.policy.isAdmin(user);
-    const cats = (await this.prisma.category.findMany({ where: isAdmin ? {} : { isActive: true }, orderBy: { sortOrder: 'asc' } })).filter((c) =>
+    const seeHidden = this.policy.isAdmin(user) || this.policy.canManageCategories(user);
+    const cats = (await this.prisma.category.findMany({ where: seeHidden ? {} : { isActive: true }, orderBy: { sortOrder: 'asc' } })).filter((c) =>
       this.policy.canViewCategory(user, c.id),
     );
     const stats = await this.prisma.event.groupBy({
@@ -102,5 +102,44 @@ export class CategoriesService {
       meta,
     });
     return updated;
+  }
+
+  async create(user: AuthUser, dto: { name: string; description?: string | null; allowsMultiDay?: boolean }, meta: ReqMeta) {
+    if (!this.policy.canManageCategories(user)) throw forbidden();
+    const base =
+      dto.name
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 50) || 'folder';
+    let slug = base;
+    for (let n = 2; await this.prisma.category.findUnique({ where: { slug }, select: { id: true } }); n++) slug = `${base}-${n}`;
+    const last = await this.prisma.category.aggregate({ _max: { sortOrder: true } });
+    const created = await this.prisma.category.create({
+      data: {
+        slug,
+        name: dto.name.trim(),
+        description: dto.description?.trim() || null,
+        allowsMultiDay: dto.allowsMultiDay ?? false,
+        sortOrder: (last._max.sortOrder ?? 0) + 1,
+      },
+    });
+    await this.audit.record({ actorId: user.id, action: 'CATEGORY_CREATED', entityType: 'CATEGORY', entityId: created.id, metadata: { name: created.name, slug }, meta });
+    return created;
+  }
+
+  /** Only empty folders can be deleted; ones with events can be hidden instead. */
+  async remove(user: AuthUser, id: string, meta: ReqMeta): Promise<void> {
+    if (!this.policy.canManageCategories(user)) throw forbidden();
+    const c = await this.prisma.category.findUnique({ where: { id }, include: { _count: { select: { events: true } } } });
+    if (!c) throw notFound('Category');
+    if (c._count.events > 0)
+      throw badRequest('CATEGORY_NOT_EMPTY', `“${c.name}” still has ${c._count.events} event(s), including any in the bin. Move or delete them first, or hide the folder instead.`);
+    await this.prisma.$transaction([
+      this.prisma.userCategoryAccess.deleteMany({ where: { categoryId: id } }),
+      this.prisma.category.delete({ where: { id } }),
+    ]);
+    await this.audit.record({ actorId: user.id, action: 'CATEGORY_DELETED', entityType: 'CATEGORY', entityId: id, metadata: { name: c.name, slug: c.slug }, meta });
   }
 }

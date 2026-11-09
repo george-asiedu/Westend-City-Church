@@ -113,6 +113,32 @@ export function render(job: MailJob): { subject: string; html: string; text: str
         disclaimer: 'If you did not make this change, contact an administrator immediately.',
       };
       break;
+    case 'email-change-verify':
+      subject = 'Confirm your new WCC Media email address';
+      l = {
+        greeting: hello,
+        paragraphs: [`You asked to change the email address on your WCC Media account to ${d.newEmail ?? 'this address'}. To confirm, click the button below.`],
+        cta: { label: 'Confirm email address', href: d.link ?? env.WEB_ORIGIN },
+        note: 'This link can only be used once and will expire in 60 minutes. Confirming signs you out of your other devices.',
+        disclaimer: 'If you did not ask for this, you can ignore this email. Nothing will change.',
+      };
+      break;
+    case 'email-change-requested':
+      subject = 'Email change requested on your WCC Media account';
+      l = {
+        greeting: hello,
+        paragraphs: [`Someone signed in to your WCC Media account asked to change its email address to ${d.newEmail ?? 'a new address'}. The change only happens once the new address is confirmed.`],
+        disclaimer: 'If this was not you, change your password now and contact an administrator.',
+      };
+      break;
+    case 'email-changed':
+      subject = 'Your WCC Media email address was changed';
+      l = {
+        greeting: hello,
+        paragraphs: [`The email address on your WCC Media account was changed to ${d.newEmail ?? 'a new address'}. Use the new address to sign in from now on.`],
+        disclaimer: 'If you did not make this change, contact an administrator immediately.',
+      };
+      break;
     case 'export-ready':
       subject = `Your download is ready: ${d.title ?? ''}`;
       l = {

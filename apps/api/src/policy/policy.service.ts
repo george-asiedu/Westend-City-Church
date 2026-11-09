@@ -13,7 +13,7 @@ export interface MediaLike {
   deletedById?: string | null;
 }
 
-type Principal = Pick<AuthUser, 'id' | 'role' | 'grants'>;
+type Principal = Pick<AuthUser, 'id' | 'role' | 'grants'> & Partial<Pick<AuthUser, 'rolePermissions'>>;
 
 const ADMINS: Role[] = ['SUPER_ADMIN', 'MEDIA_ADMIN'];
 const CONTRIBUTORS: Role[] = ['MEDIA_TEAM', 'PASTOR'];
@@ -125,7 +125,12 @@ export class PolicyService {
     return this.isAdmin(u);
   }
 
+  /** Add, edit and delete folders: Super Admin, or any role a Super Admin granted it to. */
   canManageCategories(u: Principal): boolean {
+    return u.role === 'SUPER_ADMIN' || !!u.rolePermissions?.has('MANAGE_CATEGORIES');
+  }
+
+  canManageRolePermissions(u: Principal): boolean {
     return u.role === 'SUPER_ADMIN';
   }
 

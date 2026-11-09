@@ -51,6 +51,7 @@ export function ShareDialog({
       }),
     onSuccess: (r) => {
       setUrl(r.url);
+      toast.success('Share link created');
       void qc.invalidateQueries({ queryKey: ['shares'] });
     },
     onError: (e) => toast.error(errorMessage(e)),

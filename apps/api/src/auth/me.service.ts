@@ -14,7 +14,10 @@ export class MeService {
     const u = await this.prisma.user.findUnique({ where: { id: userId }, include: { categoryAccess: true } });
     if (!u) throw notFound('User');
     const grants = new Map<string, Grant>(u.categoryAccess.map((g) => [g.categoryId, g]));
-    const p = { id: u.id, role: u.role, grants };
+    const rolePermissions = new Set(
+      (await this.prisma.rolePermission.findMany({ where: { role: u.role }, select: { permission: true } })).map((r) => r.permission),
+    );
+    const p = { id: u.id, role: u.role, grants, rolePermissions };
     const isAdmin = this.policy.isAdmin(p);
     return {
       id: u.id,
@@ -32,6 +35,7 @@ export class MeService {
         canUploadAnywhere: this.policy.canUploadAnywhere(p),
         canInvite: this.policy.canInvite(p, 'VIEWER'),
         canManageCategories: this.policy.canManageCategories(p),
+        canManageRolePermissions: this.policy.canManageRolePermissions(p),
         canViewAudit: this.policy.canViewAudit(p),
         canPurge: this.policy.canPurge(p),
       },

@@ -97,6 +97,9 @@ export class JwtAuthGuard implements CanActivate {
       role: user.role,
       totpEnabled: user.totpEnabled,
       grants,
+      rolePermissions: new Set(
+        (await this.prisma.rolePermission.findMany({ where: { role: user.role }, select: { permission: true } })).map((r) => r.permission),
+      ),
     };
 
     // Admins must enable 2FA before using anything but their account page (§7.1).

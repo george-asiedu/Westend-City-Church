@@ -1,5 +1,6 @@
 'use client';
 
+import { toast } from 'sonner';
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -57,8 +58,10 @@ export default function AcceptInvitePage({ params }: { params: Promise<{ token: 
           try {
             await api('/invitations/accept', { method: 'POST', anonymous: true, body: { token, fullName, title: title || undefined, phone: phone || undefined, password } });
             setDone(true);
+            toast.success('Account created. You can sign in now.');
           } catch (err) {
             setError(errorMessage(err));
+            toast.error(errorMessage(err));
           } finally {
             setBusy(false);
           }

@@ -20,7 +20,14 @@ export interface ExportJobData {
   exportId: string;
 }
 
-export type MailTemplate = 'invite' | 'password-reset' | '2fa-enabled' | 'export-ready';
+export type MailTemplate =
+  | 'invite'
+  | 'password-reset'
+  | '2fa-enabled'
+  | 'export-ready'
+  | 'email-change-verify'
+  | 'email-change-requested'
+  | 'email-changed';
 export interface MailJob {
   to: string;
   template: MailTemplate;

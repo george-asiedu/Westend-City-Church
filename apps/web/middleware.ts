@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Pages that need no session. Everything else is the private dashboard.
-const PUBLIC = [/^\/login/, /^\/accept-invite\//, /^\/forgot-password/, /^\/reset-password\//, /^\/s\//, /^\/highlights/, /^\/offline/];
+const PUBLIC = [/^\/login/, /^\/accept-invite\//, /^\/forgot-password/, /^\/reset-password\//, /^\/verify-email\//, /^\/s\//, /^\/highlights/, /^\/offline/];
 
 /**
  * The browser only ever talks to this app's origin (Vercel in production,

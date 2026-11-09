@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     qc.clear();
     // Drop cached app pages so the next person on this device starts clean.
     if ('caches' in window) for (const k of await caches.keys()) if (k.includes('-pages')) await caches.delete(k);
-    window.location.assign('/login');
+    window.location.assign('/login?signedOut=1');
   }
 
   const nav = [

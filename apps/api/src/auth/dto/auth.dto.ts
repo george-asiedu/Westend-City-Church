@@ -23,6 +23,15 @@ export class ChangePasswordDto {
   @IsString() @MaxLength(200) newPassword!: string;
 }
 
+export class ChangeEmailDto {
+  @Transform(trimLower) @IsEmail() @MaxLength(254) newEmail!: string;
+  @IsString() @MaxLength(200) password!: string;
+}
+
+export class TokenDto {
+  @IsString() @MaxLength(200) token!: string;
+}
+
 export class TotpDto {
   @Matches(/^\d{6}$/) totp!: string;
 }

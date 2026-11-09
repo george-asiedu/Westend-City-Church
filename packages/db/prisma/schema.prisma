@@ -87,6 +87,7 @@ model User {
   invitationsSent Invitation[]         @relation("InvitedBy")
   auditLogs       AuditLog[]
   passwordResets  PasswordResetToken[]
+  emailChanges    EmailChangeToken[]
   recoveryCodes   RecoveryCode[]
   shareLinks      ShareLink[]
   exports         ExportJob[]
@@ -139,6 +140,20 @@ model PasswordResetToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+}
+
+/// Pending email change: confirmed by a link sent to the new address.
+model EmailChangeToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  newEmail  String    @db.Citext
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model RecoveryCode {
@@ -384,4 +399,13 @@ model AuditLog {
   @@index([actorId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@index([action])
+}
+
+/// Extra permissions a Super Admin has granted to a whole role.
+model RolePermission {
+  role       Role
+  permission String   @db.VarChar(60)
+  createdAt  DateTime @default(now())
+
+  @@id([role, permission])
 }

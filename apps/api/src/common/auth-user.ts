@@ -16,4 +16,6 @@ export interface AuthUser {
   totpEnabled: boolean;
   /** categoryId → grant; loaded once per request. */
   grants: Map<string, Grant>;
+  /** Extra permissions granted to this user's role by a Super Admin. */
+  rolePermissions?: Set<string>;
 }

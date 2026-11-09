@@ -46,3 +46,12 @@ export const ROLE_LABELS: Record<Role, string> = {
   PASTOR: 'Pastor',
   VIEWER: 'Viewer',
 };
+
+/** Permissions a Super Admin can grant to other roles (Super Admin always has them). */
+export const ROLE_PERMISSIONS = {
+  MANAGE_CATEGORIES: 'MANAGE_CATEGORIES',
+} as const;
+export type RolePermissionKey = (typeof ROLE_PERMISSIONS)[keyof typeof ROLE_PERMISSIONS];
+export const ROLE_PERMISSION_LABELS: Record<RolePermissionKey, string> = {
+  MANAGE_CATEGORIES: 'Add, edit and delete folders',
+};

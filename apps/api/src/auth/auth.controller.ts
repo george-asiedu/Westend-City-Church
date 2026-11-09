@@ -7,7 +7,7 @@ import type { AuthUser } from '../common/auth-user';
 import { REFRESH_COOKIE } from '../common/guards';
 import { AuthService } from './auth.service';
 import { clearAuthCookies, setAuthCookies } from './cookies';
-import { ChangePasswordDto, Disable2faDto, EmailDto, LoginDto, ResetPasswordDto, TotpDto } from './dto/auth.dto';
+import { ChangeEmailDto, ChangePasswordDto, Disable2faDto, EmailDto, LoginDto, ResetPasswordDto, TokenDto, TotpDto } from './dto/auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -76,6 +76,33 @@ export class AuthController {
   @HttpCode(204)
   async changePassword(@CurrentUser() user: AuthUser, @Body() dto: ChangePasswordDto, @Meta() meta: ReqMeta) {
     await this.auth.changePassword(user, dto.currentPassword, dto.newPassword, meta);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('change-email')
+  @HttpCode(200)
+  changeEmail(@CurrentUser() user: AuthUser, @Body() dto: ChangeEmailDto, @Meta() meta: ReqMeta) {
+    return this.auth.requestEmailChange(user, dto.newEmail, dto.password, meta);
+  }
+
+  @Get('change-email')
+  pendingEmail(@CurrentUser() user: AuthUser) {
+    return this.auth.pendingEmailChange(user).then((p) => p ?? { pendingEmail: null, expiresAt: null });
+  }
+
+  @Delete('change-email')
+  @HttpCode(204)
+  async cancelEmail(@CurrentUser() user: AuthUser) {
+    await this.auth.cancelEmailChange(user);
+  }
+
+  @Public()
+  @SkipCsrfToken()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('verify-email')
+  @HttpCode(200)
+  verifyEmail(@Body() dto: TokenDto, @Meta() meta: ReqMeta, @Res({ passthrough: true }) res: Response) {
+    return this.auth.verifyEmailChange(dto.token, meta).then((r) => (clearAuthCookies(res, this.env), r));
   }
 
   @AllowPending2fa()

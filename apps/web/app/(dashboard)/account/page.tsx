@@ -48,6 +48,81 @@ function Profile({ me }: { me: MeResponse }) {
   );
 }
 
+function ChangeEmail({ me }: { me: MeResponse }) {
+  const qc = useQueryClient();
+  const [newEmail, setNewEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const pending = useQuery({
+    queryKey: ['auth', 'change-email'],
+    queryFn: () => api<{ pendingEmail: string | null; expiresAt: string | null }>('/auth/change-email'),
+  });
+  const request = useMutation({
+    mutationFn: () => api('/auth/change-email', { method: 'POST', body: { newEmail, password } }),
+    onSuccess: () => {
+      toast.success(`Verification link sent to ${newEmail.trim()}`);
+      setNewEmail('');
+      setPassword('');
+      void qc.invalidateQueries({ queryKey: ['auth', 'change-email'] });
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const cancel = useMutation({
+    mutationFn: () => api('/auth/change-email', { method: 'DELETE' }),
+    onSuccess: () => (toast.success('Email change cancelled'), void qc.invalidateQueries({ queryKey: ['auth', 'change-email'] })),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const p = pending.data?.pendingEmail ? pending.data : null;
+  return (
+    <Card className="space-y-4 p-5">
+      <h2 className="font-semibold">Email address</h2>
+      <p className="text-sm text-muted">
+        You sign in with <span className="font-medium text-fg">{me.email}</span>.
+      </p>
+      {p && (
+        <div className="space-y-2 rounded-lg border border-brand/30 bg-brand/5 p-3 text-sm">
+          <p>
+            Waiting for you to confirm <span className="font-medium">{p.pendingEmail}</span>. Open the link we sent there
+            {p.expiresAt ? ` before ${formatDateTime(p.expiresAt)}` : ''}.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                // Resending needs the password again: prefill the address and jump to it.
+                setNewEmail(p.pendingEmail ?? '');
+                document.getElementById('nep')?.focus();
+              }}
+            >
+              Resend
+            </Button>
+            <Button size="sm" variant="ghost" loading={cancel.isPending} onClick={() => cancel.mutate()}>
+              Cancel change
+            </Button>
+          </div>
+        </div>
+      )}
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          request.mutate();
+        }}
+      >
+        <Field label="New email" htmlFor="ne" hint="We'll send a link to this address. Your email only changes once you open it.">
+          <Input id="ne" type="email" autoComplete="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+        </Field>
+        <Field label="Current password" htmlFor="nep">
+          <PasswordInput id="nep" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+        <Button type="submit" disabled={!newEmail.trim() || !password} loading={request.isPending}>
+          Send verification link
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
 function ChangePassword() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState<string | null>(null);
@@ -82,7 +157,9 @@ function TwoFactor({ me, highlight }: { me: MeResponse; highlight: boolean }) {
   const start = useMutation({ mutationFn: () => api<{ qrDataUrl: string; otpauthUri: string; secret: string }>('/auth/2fa/setup', { method: 'POST' }), onSuccess: setSetup, onError: (e) => toast.error(errorMessage(e)) });
   const enable = useMutation({
     mutationFn: () => api<{ recoveryCodes: string[] }>('/auth/2fa/enable', { method: 'POST', body: { totp: code } }),
-    onSuccess: (r) => (setCodes(r.recoveryCodes), setSetup(null), void qc.invalidateQueries({ queryKey: qk.me })),
+    onSuccess: (r) => (
+      setCodes(r.recoveryCodes), setSetup(null), toast.success('Two-factor authentication is on. Save your recovery codes.'), void qc.invalidateQueries({ queryKey: qk.me })
+    ),
     onError: (e) => toast.error(errorMessage(e)),
   });
   const disable = useMutation({
@@ -206,7 +283,12 @@ function Sessions() {
           {s.current ? (
             <Badge tone="success">This device</Badge>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => api(`/auth/sessions/${s.id}`, { method: 'DELETE' }).then(() => qc.invalidateQueries({ queryKey: qk.sessions }))}>
+            <Button size="sm" variant="outline" onClick={() =>
+                api(`/auth/sessions/${s.id}`, { method: 'DELETE' }).then(
+                  () => (toast.success('Device signed out'), qc.invalidateQueries({ queryKey: qk.sessions })),
+                  (e) => toast.error(errorMessage(e)),
+                )
+              }>
               Sign out
             </Button>
           )}
@@ -226,6 +308,7 @@ function AccountInner() {
       <div className="grid gap-4 lg:grid-cols-2">
         <TwoFactor me={me.data} highlight={params.get('setup2fa') === '1'} />
         <Profile me={me.data} />
+        <ChangeEmail me={me.data} />
         <ChangePassword />
         <Sessions />
       </div>

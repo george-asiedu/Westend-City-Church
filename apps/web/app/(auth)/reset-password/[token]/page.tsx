@@ -1,5 +1,6 @@
 'use client';
 
+import { toast } from 'sonner';
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -35,8 +36,10 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
             try {
               await api('/auth/reset-password', { method: 'POST', body: { token, password }, anonymous: true });
               setDone(true);
+              toast.success('Password changed. Sign in with your new password.');
             } catch (err) {
               setError(errorMessage(err));
+              toast.error(errorMessage(err));
             } finally {
               setBusy(false);
             }

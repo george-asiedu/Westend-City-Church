@@ -1,5 +1,6 @@
 'use client';
 
+import { toast } from 'sonner';
 import { useEffect, useRef } from 'react';
 import Uppy, { type Meta } from '@uppy/core';
 import Dashboard from '@uppy/dashboard';
@@ -150,7 +151,13 @@ export function Uploader({ eventId, onUploaded }: { eventId: string; onUploaded?
       if (file.meta.mediaId && !file.progress?.uploadComplete) void api(`/uploads/${file.meta.mediaId}`, { method: 'DELETE' }).catch(() => undefined);
     });
     uppy.on('upload', () => (uploading.current = true));
-    uppy.on('complete', () => (uploading.current = false));
+    uppy.on('complete', (result) => {
+      uploading.current = false;
+      const ok = result.successful?.length ?? 0;
+      const bad = result.failed?.length ?? 0;
+      if (ok) toast.success(`${ok} file${ok === 1 ? '' : 's'} uploaded. Processing has started.`);
+      if (bad) toast.error(`${bad} file${bad === 1 ? '' : 's'} failed to upload. Retry them from the list.`);
+    });
 
     const warn = (e: BeforeUnloadEvent) => {
       if (uploading.current) {
