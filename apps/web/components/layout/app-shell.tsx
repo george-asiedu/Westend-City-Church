@@ -30,7 +30,7 @@ import { PageLoader } from '@/components/ui/misc';
 import { api } from '@/lib/api';
 import { useCategories, useMe } from '@/lib/queries';
 import { cn } from '@/lib/utils';
-import { InstallPrompt, OfflineBanner } from './pwa';
+import { InstallPrompt, OfflineBanner, installApp } from './pwa';
 
 function useCdnSession(enabled: boolean) {
   useEffect(() => {
@@ -148,6 +148,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <a.icon className="h-4 w-4" /> {a.label}
                   </MenuItem>
                 ))}
+                <MenuItem onSelect={() => void installApp()}>
+                  <Download className="h-4 w-4" /> Install app
+                </MenuItem>
                 <MenuItem onSelect={toggleTheme}>
                   <Moon className="h-4 w-4 dark:hidden" />
                   <Sun className="hidden h-4 w-4 dark:block" /> Toggle theme

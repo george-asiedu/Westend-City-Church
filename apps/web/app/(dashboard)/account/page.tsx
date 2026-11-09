@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, ExternalLink, Monitor, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Copy, ExternalLink, KeyRound, Monitor, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { ROLE_LABELS, type MeResponse } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { NewPasswordFields } from '@/components/layout/password-form';
 import { api, errorMessage } from '@/lib/api';
 import { qk, useMe } from '@/lib/queries';
 import { formatDateTime } from '@/lib/utils';
+import { openAppLink, platform } from '@/lib/platform';
 
 function Profile({ me }: { me: MeResponse }) {
   const qc = useQueryClient();
@@ -146,6 +147,57 @@ function ChangePassword() {
   );
 }
 
+/** Phone: buttons that open an authenticator directly. Computer: QR to scan with a phone. */
+function AuthenticatorLinks({ setup }: { setup: { qrDataUrl: string; otpauthUri: string } }) {
+  const [p, setP] = useState<ReturnType<typeof platform> | null>(null);
+  const [showQr, setShowQr] = useState(false);
+  useEffect(() => setP(platform()), []);
+  if (!p) return null;
+  const phone = p.ios || p.android;
+  const open = async (url: string, label: string) => {
+    const opened = await openAppLink(url);
+    if (!opened) {
+      toast.error(`${label} didn’t open. Copy the setup key below and paste it into your authenticator app instead.`, { duration: 8000 });
+      document.getElementById('setup-key')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+  const qr = (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={setup.qrDataUrl} alt="QR code for your authenticator app" width={200} height={200} className="rounded-lg bg-white p-2" />
+  );
+  if (!phone)
+    return (
+      <div className="space-y-2">
+        <p className="text-sm">Scan this with an authenticator app on your phone (Google Authenticator, Microsoft Authenticator, 1Password or the iPhone camera), then enter the 6-digit code it shows.</p>
+        {qr}
+      </div>
+    );
+  return (
+    <div className="space-y-3">
+      <p className="text-sm">Add WCC Media to an authenticator on this phone, then come back here and enter the 6-digit code it shows.</p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        {p.ios && (
+          <Button onClick={() => open(setup.otpauthUri.replace(/^otpauth:/, 'apple-otpauth:'), 'iPhone Passwords')}>
+            <KeyRound className="h-4 w-4" /> Add to iPhone Passwords
+          </Button>
+        )}
+        <Button variant={p.ios ? 'outline' : 'primary'} onClick={() => open(setup.otpauthUri, 'Your authenticator app')}>
+          <ExternalLink className="h-4 w-4" /> Open authenticator app
+        </Button>
+      </div>
+      {p.ios && (
+        <p className="text-xs text-muted">
+          iPhone Passwords: after saving, the code is under <b>Passwords → WCC Media</b> (or Settings → Passwords on older iOS), and iPhone can fill it in for you when you sign in.
+        </p>
+      )}
+      <button type="button" className="text-xs text-brand hover:underline" onClick={() => setShowQr((v) => !v)}>
+        {showQr ? 'Hide QR code' : 'Show QR code (to scan with another device)'}
+      </button>
+      {showQr && qr}
+    </div>
+  );
+}
+
 function TwoFactor({ me, highlight }: { me: MeResponse; highlight: boolean }) {
   const qc = useQueryClient();
   const [setup, setSetup] = useState<{ qrDataUrl: string; otpauthUri: string; secret: string } | null>(null);
@@ -201,23 +253,11 @@ function TwoFactor({ me, highlight }: { me: MeResponse; highlight: boolean }) {
         </>
       ) : setup ? (
         <div className="space-y-3">
-          <p className="text-sm">
-            Add WCC Media to an authenticator app (Google Authenticator, Microsoft Authenticator or 1Password), then enter the 6-digit code it shows.
-          </p>
-          {/* On a phone the QR can't be scanned by the same phone: open the app directly instead. */}
-          <a
-            href={setup.otpauthUri}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand px-4 text-sm font-medium text-white hover:opacity-90 sm:hidden"
-          >
-            <ExternalLink className="h-4 w-4" /> Open in authenticator app
-          </a>
-          <div className="hidden sm:block">
-            <p className="mb-2 text-xs text-muted">Scan with your phone:</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={setup.qrDataUrl} alt="QR code for your authenticator app" width={200} height={200} className="rounded-lg bg-white p-2" />
-          </div>
+          <AuthenticatorLinks setup={setup} />
           <div className="space-y-1.5">
-            <p className="text-xs text-muted">Or add it by hand: choose “Enter a setup key”, account WCC Media, and paste this key (time-based):</p>
+            <p id="setup-key" className="text-xs text-muted">
+              Or add it by hand: in your authenticator app choose <b>Enter a setup key</b> (Google), <b>Add account → Other</b> (Microsoft) or <b>Setup key</b> (iPhone Passwords), name it WCC Media, paste this key and choose <b>time-based</b>:
+            </p>
             <div className="flex items-center gap-2">
               <code className="min-w-0 flex-1 break-all rounded-lg border border-border bg-surface px-3 py-2 font-mono text-sm tracking-wider">
                 {setup.secret.match(/.{1,4}/g)?.join(' ')}
