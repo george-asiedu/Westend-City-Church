@@ -87,7 +87,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     // Refuse to boot with missing or weak secrets (§13).
     throw new Error(`Invalid environment:\n${lines}`);
   }
-  return parsed.data;
+  // Breached-password checks are always on in production, whatever the setting says.
+  return { ...parsed.data, PWNED_PASSWORD_CHECK: parsed.data.NODE_ENV === 'production' || parsed.data.PWNED_PASSWORD_CHECK };
 }
 
 export function allowedOrigins(env: Env): string[] {
