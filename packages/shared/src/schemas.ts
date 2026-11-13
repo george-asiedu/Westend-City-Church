@@ -3,7 +3,7 @@ import { ROLES } from './enums';
 
 export const passwordSchema = z
   .string()
-  .min(12, 'Use at least 12 characters')
+  .min(8, 'Use at least 8 characters')
   .max(200, 'That password is too long');
 
 export const loginSchema = z.object({

@@ -16,9 +16,9 @@ async function main(): Promise<void> {
   const rl = createInterface({ input: stdin, output: stdout });
   const email = (await rl.question('Email: ')).trim().toLowerCase();
   const fullName = (await rl.question('Full name: ')).trim();
-  const password = await rl.question('Password (min 12 chars): ');
+  const password = await rl.question('Password (min 8 chars): ');
   rl.close();
-  if (!/^[^@\s]+@[^@\s]+$/.test(email) || fullName.length < 2 || password.length < 12) throw new Error('Invalid input');
+  if (!/^[^@\s]+@[^@\s]+$/.test(email) || fullName.length < 2 || password.length < 8) throw new Error('Invalid input');
   const prisma = new PrismaClient();
   try {
     const passwordHash = await argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });

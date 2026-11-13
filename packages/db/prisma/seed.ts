@@ -25,7 +25,7 @@ async function main(): Promise<void> {
     console.log('A SUPER_ADMIN already exists; skipping admin seed');
     return;
   }
-  if (password.length < 12) throw new Error('SEED_ADMIN_PASSWORD must be at least 12 characters');
+  if (password.length < 8) throw new Error('SEED_ADMIN_PASSWORD must be at least 8 characters');
   const passwordHash = await argon2.hash(password, {
     type: argon2.argon2id,
     memoryCost: 19456,

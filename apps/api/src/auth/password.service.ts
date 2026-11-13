@@ -35,12 +35,12 @@ export class PasswordService {
     return argon2.verify(hash, plain).catch(() => false);
   }
 
-  /** Min 12 chars, zxcvbn ≥ 3, optional HaveIBeenPwned k-anonymity check (§7.1). */
+  /** Min 8 chars, zxcvbn ≥ 2 (with lockout + admin 2FA), optional HaveIBeenPwned k-anonymity check (§7.1). */
   async assertStrong(password: string, userInputs: string[] = []): Promise<void> {
-    if (password.length < 12) throw badRequest('WEAK_PASSWORD', 'Use at least 12 characters.');
+    if (password.length < 8) throw badRequest('WEAK_PASSWORD', 'Use at least 8 characters.');
     if (password.length > 200) throw badRequest('WEAK_PASSWORD', 'That password is too long.');
     const result = zxcvbn(password, userInputs);
-    if (result.score < 3) {
+    if (result.score < 2) {
       const hint = result.feedback.warning || result.feedback.suggestions[0] || 'Try a longer passphrase.';
       throw badRequest('WEAK_PASSWORD', `That password is too easy to guess. ${hint}`);
     }

@@ -631,7 +631,7 @@ REVOKE UPDATE, DELETE ON "AuditLog" FROM wcc_app;
 ### 7.1 Onboarding (invite-only, no public sign-up)
 1. An admin calls `POST /invitations` with `{ email, role, categoryIds[] }`.
 2. The API generates a 32-byte random token, stores its `sha256` and emails the link `https://media.../accept-invite/{token}` (it expires in 72 h).
-3. The user opens the link, sets their name and a password (min 12 chars, checked against the zxcvbn score ≥ 3 and the HaveIBeenPwned k-anonymity API—optional, behind a flag). The user becomes `ACTIVE`.
+3. The user opens the link, sets their name and a password (min 8 chars, checked against the zxcvbn score ≥ 2 and the HaveIBeenPwned k-anonymity API—optional, behind a flag). The user becomes `ACTIVE`.
 4. 2FA (TOTP) is **mandatory for SUPER_ADMIN and MEDIA_ADMIN** (enforced at next login) and optional for others.
 
 ### 7.2 Login
