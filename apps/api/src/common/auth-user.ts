@@ -18,4 +18,6 @@ export interface AuthUser {
   grants: Map<string, Grant>;
   /** Extra permissions granted to this user's role by a Super Admin. */
   rolePermissions?: Set<string>;
+  /** Leads (pastor/shepherd) a bacenta that records church-service head-counts, e.g. Ushers. */
+  serviceRecorder?: boolean;
 }

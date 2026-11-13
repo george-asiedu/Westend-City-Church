@@ -1,51 +1,51 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { Mail, Phone, UserCog } from 'lucide-react';
 import { ROLE_LABELS } from '@wcc/shared';
 import { Input, Select } from '@/components/ui/form';
 import { Badge, Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs } from '@/components/church/church-ui';
 import { Stat } from '@/components/church/group-stats';
-import { api, errorMessage } from '@/lib/api';
+import { errorMessage } from '@/lib/api';
+import { LoadMore } from '@/components/ui/load-more';
 import { useMe } from '@/lib/queries';
-import { formatDay, mk, type Leader } from '@/lib/membership';
+import { formatDay, mk, useCursorList, type Leader } from '@/lib/membership';
 
 const NEW_DAYS = 30;
 const isNew = (iso: string) => Date.now() - Date.parse(iso) < NEW_DAYS * 86_400_000;
 
 export default function LeadersPage() {
   const me = useMe();
-  const q = useQuery({ queryKey: mk.leaders, queryFn: () => api<Leader[]>('/groups/leaders'), enabled: !!me.data?.permissions.canManageMembership });
   const [role, setRole] = useState<'all' | 'PASTOR' | 'SHEPHERD'>('all');
   const [show, setShow] = useState<'all' | 'new' | 'unassigned'>('all');
   const [term, setTerm] = useState('');
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(term.trim()), 300);
+    return () => clearTimeout(t);
+  }, [term]);
+  // Filtered on the server, 20 at a time; the stats cover everyone.
+  const params = { q: debounced || undefined, role: role === 'all' ? undefined : role, show: show === 'all' ? undefined : show };
+  const q = useCursorList<Leader>([...mk.leaders, params], '/groups/leaders', params, !!me.data?.permissions.canManageMembership);
+  type Stats = { pastors: number; shepherds: number; newPastors: number; newShepherds: number; unassigned: number; neverSignedIn: number };
+  const stats = q.first?.stats as Stats | undefined;
   if (me.isLoading) return <PageLoader />;
   if (!me.data?.permissions.canManageMembership) return <EmptyState title="Only Super Admins can see the list of pastors and shepherds" />;
-  if (q.isLoading) return <PageLoader />;
   if (q.error) return <EmptyState title="Couldn’t load leaders">{errorMessage(q.error)}</EmptyState>;
-  const all = q.data ?? [];
-  const t = term.trim().toLowerCase();
-  const list = all.filter(
-    (l) =>
-      (role === 'all' || l.role === role) &&
-      (show === 'all' || (show === 'new' ? isNew(l.createdAt) : !l.leads.length && !l.shepherds.length)) &&
-      (!t || [l.fullName, l.email, l.phone].some((v) => v?.toLowerCase().includes(t))),
-  );
-  const pastors = all.filter((l) => l.role === 'PASTOR');
-  const shepherds = all.filter((l) => l.role === 'SHEPHERD');
+  const list = q.items;
+  const filtered = !!(debounced || role !== 'all' || show !== 'all');
 
   return (
     <>
       <PageHeader title="Church" subtitle="Every pastor and shepherd, and the groups they look after." />
       <ChurchTabs />
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Pastors" value={pastors.length} sub={`${pastors.filter((l) => isNew(l.createdAt)).length} new in the last ${NEW_DAYS} days`} />
-        <Stat label="Shepherds" value={shepherds.length} sub={`${shepherds.filter((l) => isNew(l.createdAt)).length} new in the last ${NEW_DAYS} days`} />
-        <Stat label="Leading no group" value={all.filter((l) => !l.leads.length && !l.shepherds.length).length} sub="Assign them from a group page" />
-        <Stat label="Never signed in" value={all.filter((l) => !l.lastLoginAt).length} sub="Invited but not active yet" />
+        <Stat label="Pastors" value={stats?.pastors ?? '—'} sub={`${stats?.newPastors ?? 0} new in the last ${NEW_DAYS} days`} />
+        <Stat label="Shepherds" value={stats?.shepherds ?? '—'} sub={`${stats?.newShepherds ?? 0} new in the last ${NEW_DAYS} days`} />
+        <Stat label="Leading no group" value={stats?.unassigned ?? '—'} sub="Assign them from a group page" />
+        <Stat label="Never signed in" value={stats?.neverSignedIn ?? '—'} sub="Invited but not active yet" />
       </div>
       <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3 [&>*]:min-w-0">
         <Input placeholder="Search name, email, phone…" value={term} onChange={(e) => setTerm(e.target.value)} />
@@ -60,7 +60,10 @@ export default function LeadersPage() {
           <option value="unassigned">Not leading a group</option>
         </Select>
       </div>
-      {list.length ? (
+      {q.isLoading ? (
+        <PageLoader />
+      ) : list.length ? (
+        <>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
           {list.map((l) => (
             <Card key={l.id} className="min-w-0 space-y-3 p-4">
@@ -116,9 +119,11 @@ export default function LeadersPage() {
             </Card>
           ))}
         </div>
+          <LoadMore hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} onClick={q.more} shown={list.length} total={q.total} />
+        </>
       ) : (
-        <EmptyState icon={<UserCog className="h-8 w-8" />} title={all.length ? 'No one matches' : 'No pastors or shepherds yet'}>
-          {all.length ? null : 'Invite people with the Pastor or Shepherd role from Admin → Users.'}
+        <EmptyState icon={<UserCog className="h-8 w-8" />} title={filtered ? 'No one matches' : 'No pastors or shepherds yet'}>
+          {filtered ? null : 'Invite people with the Pastor or Shepherd role from Admin → Users.'}
         </EmptyState>
       )}
     </>

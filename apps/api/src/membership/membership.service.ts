@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, dayRollup, type GroupType, type AttendanceKind, type GuestIntent } from '@wcc/db';
+import { SUNDAY_SERVICE_TITLES } from '@wcc/shared';
 import type {
   AttendanceSheetDto,
   AttendanceSummaryDto,
@@ -8,6 +9,7 @@ import type {
   GuestDto,
   LeaderDto,
   MemberDto,
+  Page,
   PastorDto,
   SessionInfoDto,
   SessionRowDto,
@@ -16,7 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PolicyService, type GroupRef } from '../policy/policy.service';
 import { AuditService } from '../audit/audit.service';
 import { AppException, badRequest, forbidden, notFound } from '../common/errors';
-import { fromDateOnly, toDateOnly } from '../common/pagination';
+import { cursorArgs, fromDateOnly, pageOf, pageSize, toDateOnly } from '../common/pagination';
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 
@@ -75,6 +77,8 @@ export interface GroupInput {
   parentId?: string | null;
   /** A bacenta's overall team lead (must be one of its members). */
   leadMemberId?: string | null;
+  /** Bacentas: its leaders record church-service head-counts (Super Admin only). */
+  recordsServices?: boolean;
   isActive?: boolean;
 }
 export interface MemberInput {
@@ -104,6 +108,9 @@ export interface SessionInput {
 export interface SheetInput {
   presentIds: string[];
   rosterIds: string[];
+  /** Church services: total head-count and how many of them were new converts. */
+  headcount?: number;
+  newConvertCount?: number;
   visitorCount?: number;
   firstTimerCount?: number;
   notes?: string | null;
@@ -170,6 +177,7 @@ export class MembershipService {
         children: g.children.map((c) => ({ id: c.id, name: c.name, pastor: c.pastor?.fullName ?? null, memberCount: c._count.basontaMembers })),
         roles: g.roles.map((r) => ({ id: r.id, name: r.name, memberCount: r._count.members, lead: r.lead })),
         lead: g.leadMember,
+        recordsServices: g.recordsServices,
         memberCount: countFor(g.type, g._count),
         lastMeeting: l ? { id: l.id, date: fromDateOnly(l.date)!, present: l._count.records } : null,
         canManage: this.policy.canManageGroup(user, r),
@@ -268,6 +276,10 @@ export class MembershipService {
   async updateGroup(user: AuthUser, id: string, dto: GroupInput, meta: ReqMeta): Promise<GroupDto> {
     const before = await this.loadAdministeredGroup(user, id);
     const pastorId = await this.resolvePastor(user, dto.pastorId);
+    if (dto.recordsServices !== undefined) {
+      if (!this.policy.isMembershipAdmin(user)) throw forbidden('Only a Super Admin can choose who records church services');
+      if (before.type !== 'BACENTA') throw badRequest('INVALID', 'Only a bacenta (e.g. the Ushers) records church services');
+    }
     if (dto.leadMemberId) {
       if (before.type !== 'BACENTA') throw badRequest('INVALID', 'Only bacentas have a team lead');
       const inIt = await this.prisma.memberBacenta.findUnique({ where: { memberId_groupId: { memberId: dto.leadMemberId, groupId: id } } });
@@ -283,7 +295,7 @@ export class MembershipService {
     try {
       await this.prisma.churchGroup.update({
         where: { id },
-        data: { name: dto.name?.trim() || undefined, description: blank(dto.description), meetingDay: blank(dto.meetingDay), meetingPlace: blank(dto.meetingPlace), isActive: dto.isActive, pastorId, parentId, leadMemberId: dto.leadMemberId },
+        data: { name: dto.name?.trim() || undefined, description: blank(dto.description), meetingDay: blank(dto.meetingDay), meetingPlace: blank(dto.meetingPlace), isActive: dto.isActive, pastorId, parentId, leadMemberId: dto.leadMemberId, recordsServices: dto.recordsServices },
       });
       // Members of a basonta that moved follow it to its new constituency.
       if (parentId) await this.prisma.member.updateMany({ where: { basontaId: id }, data: { constituencyId: parentId } });
@@ -323,7 +335,7 @@ export class MembershipService {
     if (!this.policy.canManageGroup(user, ref(g)) && !this.policy.canViewChurchStats(user)) throw forbidden('Only this group’s leaders can see its statistics');
     const { from, to, f, t } = range(q, 90);
     const memberWhere: Prisma.MemberWhereInput = { ...memberWhereFor(g), isActive: true };
-    const [members, sessions, roles, guests, church, teamRoles, noRole] = await Promise.all([
+    const [members, sessions, roles, guests, teamRoles, noRole] = await Promise.all([
       this.prisma.member.count({ where: memberWhere }),
       this.prisma.attendanceSession.findMany({
         where: { groupId: id, date: { gte: f, lte: t } },
@@ -336,15 +348,6 @@ export class MembershipService {
         where: { session: { date: { gte: f, lte: t } }, broughtBy: memberWhere },
         _count: { _all: true, convertedMemberId: true },
       }),
-      this.prisma.$queryRaw<Array<{ sessions: number; present: number }>>`
-        SELECT count(DISTINCT s.id)::int AS sessions, count(r."memberId")::int AS present
-        FROM "AttendanceSession" s
-        LEFT JOIN "AttendanceRecord" r ON r."sessionId" = s.id AND r."memberId" IN (
-          SELECT m.id FROM "Member" m WHERE m."isActive" AND (
-            ${g.type === 'CONSTITUENCY'} AND m."constituencyId" = ${id}::uuid
-            OR ${g.type === 'BASONTA'} AND m."basontaId" = ${id}::uuid
-            OR ${g.type === 'BACENTA'} AND EXISTS (SELECT 1 FROM "MemberBacenta" b WHERE b."memberId" = m.id AND b."groupId" = ${id}::uuid)))
-        WHERE s."kind" = 'CHURCH_SERVICE' AND s."date" BETWEEN ${f}::date AND ${t}::date`,
       g.type === 'BACENTA'
         ? this.prisma.bacentaRole.findMany({
             where: { groupId: id },
@@ -389,7 +392,6 @@ export class MembershipService {
     }
     const last = meetings[meetings.length - 1];
     const gi = (k: GuestIntent) => guests.find((x) => x.intent === k);
-    const c = church[0] ?? { sessions: 0, present: 0 };
     return {
       from,
       to,
@@ -408,39 +410,73 @@ export class MembershipService {
         joining: gi('JOINING')?._count._all ?? 0,
         converted: (gi('VISIT')?._count.convertedMemberId ?? 0) + (gi('JOINING')?._count.convertedMemberId ?? 0),
       },
-      churchServices: { sessions: c.sessions, averagePresent: c.sessions ? Math.round((c.present / c.sessions) * 10) / 10 : 0 },
     };
   }
 
-  /** Super Admin: every pastor and shepherd, with the groups they lead or shepherd. */
-  async leaders(user: AuthUser): Promise<LeaderDto[]> {
+  /**
+   * Super Admin: pastors and shepherds (newest first), 20 at a time, with the groups they
+   * lead or shepherd. Stats cover everyone, whatever the filters.
+   */
+  async leaders(
+    user: AuthUser,
+    q: { cursor?: string; limit?: number; q?: string; role?: 'PASTOR' | 'SHEPHERD'; show?: 'new' | 'unassigned' },
+  ): Promise<Page<LeaderDto> & { stats: { pastors: number; shepherds: number; newPastors: number; newShepherds: number; unassigned: number; neverSignedIn: number } }> {
     if (!this.policy.canViewLeaders(user)) throw forbidden();
-    const rows = await this.prisma.user.findMany({
-      where: { OR: [{ role: { in: ['PASTOR', 'SHEPHERD'] } }, { pastoredGroups: { some: {} } }] },
-      select: {
-        ...pastorSelect,
-        role: true,
-        status: true,
-        createdAt: true,
-        lastLoginAt: true,
-        pastoredGroups: { select: { id: true, name: true, type: true }, orderBy: { name: 'asc' } },
-        shepherding: { select: { group: { select: { id: true, name: true, type: true } } } },
-      },
-      orderBy: [{ createdAt: 'desc' }],
-    });
-    return rows.map((u) => ({
-      id: u.id,
-      fullName: u.fullName,
-      title: u.title,
-      phone: u.phone,
-      email: u.email,
-      role: u.role as LeaderDto['role'],
-      status: u.status,
-      createdAt: u.createdAt.toISOString(),
-      lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
-      leads: u.pastoredGroups,
-      shepherds: u.shepherding.map((s) => s.group).sort((a, b) => a.name.localeCompare(b.name)),
-    }));
+    const NEW_SINCE = new Date(Date.now() - 30 * 86_400_000);
+    const base: Prisma.UserWhereInput = { OR: [{ role: { in: ['PASTOR', 'SHEPHERD'] } }, { pastoredGroups: { some: {} } }] };
+    const unassigned: Prisma.UserWhereInput = { pastoredGroups: { none: {} }, shepherding: { none: {} } };
+    const term = q.q?.trim();
+    const where: Prisma.UserWhereInput = {
+      AND: [
+        base,
+        q.role ? { role: q.role } : {},
+        q.show === 'new' ? { createdAt: { gte: NEW_SINCE } } : q.show === 'unassigned' ? unassigned : {},
+        term ? { OR: [{ fullName: { contains: term, mode: 'insensitive' } }, { email: { contains: term, mode: 'insensitive' } }, { phone: { contains: term } }] } : {},
+      ],
+    };
+    const take = pageSize(q.limit);
+    const [rows, total, pastors, shepherds, newPastors, newShepherds, unassignedN, neverSignedIn] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        select: {
+          ...pastorSelect,
+          role: true,
+          status: true,
+          createdAt: true,
+          lastLoginAt: true,
+          pastoredGroups: { select: { id: true, name: true, type: true }, orderBy: { name: 'asc' } },
+          shepherding: { select: { group: { select: { id: true, name: true, type: true } } } },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...cursorArgs(q.cursor, take),
+      }),
+      this.prisma.user.count({ where }),
+      this.prisma.user.count({ where: { role: 'PASTOR' } }),
+      this.prisma.user.count({ where: { role: 'SHEPHERD' } }),
+      this.prisma.user.count({ where: { role: 'PASTOR', createdAt: { gte: NEW_SINCE } } }),
+      this.prisma.user.count({ where: { role: 'SHEPHERD', createdAt: { gte: NEW_SINCE } } }),
+      this.prisma.user.count({ where: { AND: [base, unassigned] } }),
+      this.prisma.user.count({ where: { AND: [base, { lastLoginAt: null }] } }),
+    ]);
+    const { items, nextCursor } = pageOf(rows, take);
+    return {
+      items: items.map((u) => ({
+        id: u.id,
+        fullName: u.fullName,
+        title: u.title,
+        phone: u.phone,
+        email: u.email,
+        role: u.role as LeaderDto['role'],
+        status: u.status,
+        createdAt: u.createdAt.toISOString(),
+        lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+        leads: u.pastoredGroups,
+        shepherds: u.shepherding.map((x) => x.group).sort((a, b) => a.name.localeCompare(b.name)),
+      })),
+      nextCursor,
+      total,
+      stats: { pastors, shepherds, newPastors, newShepherds, unassigned: unassignedN, neverSignedIn },
+    };
   }
 
   // ---------------------------------------------------------------- bacenta team roles
@@ -593,17 +629,20 @@ export class MembershipService {
 
   async listMembers(
     user: AuthUser,
-    q: { q?: string; constituencyId?: string; basontaId?: string; bacentaId?: string; teamRoleId?: string; churchRole?: string; status?: 'active' | 'inactive' | 'all'; page?: number; limit?: number },
-  ): Promise<{ items: MemberDto[]; total: number; page: number; pageSize: number }> {
+    q: { q?: string; constituencyId?: string; basontaId?: string; bacentaId?: string; teamRoleId?: string; churchRole?: string; leaders?: boolean; status?: 'active' | 'inactive' | 'all'; cursor?: string; limit?: number },
+  ): Promise<Page<MemberDto> & { total: number }> {
     this.assertView(user);
-    const pageSize = Math.min(Math.max(q.limit ?? 50, 1), 500);
-    const page = Math.max(q.page ?? 1, 1);
+    const take = pageSize(q.limit);
     const term = q.q?.trim();
     const where: Prisma.MemberWhereInput = {
       ...(q.status === 'all' ? {} : { isActive: q.status !== 'inactive' }),
       ...(q.constituencyId === 'none' ? { constituencyId: null } : q.constituencyId ? { constituencyId: q.constituencyId } : {}),
       ...(q.basontaId === 'none' ? { basontaId: null } : q.basontaId ? { basontaId: q.basontaId } : {}),
-      ...(q.bacentaId ? { bacentas: { some: { groupId: q.bacentaId, ...(q.teamRoleId ? { roles: { some: { roleId: q.teamRoleId } } } : {}) } } } : {}),
+      ...(q.bacentaId
+        ? { bacentas: { some: { groupId: q.bacentaId, ...(q.teamRoleId === 'none' ? { roles: { none: {} } } : q.teamRoleId ? { roles: { some: { roleId: q.teamRoleId } } } : {}) } } }
+        : {}),
+      // Shepherds and leaders by their role in church.
+      ...(q.leaders ? { AND: [{ OR: ['shepherd', 'leader', 'pastor', 'overseer'].map((w) => ({ churchRole: { contains: w, mode: 'insensitive' as const } })) }] } : {}),
       ...(q.churchRole ? { churchRole: { equals: q.churchRole, mode: 'insensitive' } } : {}),
       ...(term
         ? {
@@ -618,10 +657,11 @@ export class MembershipService {
     };
     const [total, rows] = await this.prisma.$transaction([
       this.prisma.member.count({ where }),
-      this.prisma.member.findMany({ where, include: memberInclude, orderBy: [{ fullName: 'asc' }, { id: 'asc' }], skip: (page - 1) * pageSize, take: pageSize }),
+      this.prisma.member.findMany({ where, include: memberInclude, orderBy: [{ fullName: 'asc' }, { id: 'asc' }], ...cursorArgs(q.cursor, take) }),
     ]);
-    const seen = await this.lastSeen(rows.map((r) => r.id));
-    return { items: rows.map((m) => this.toMemberDto(user, m, seen.get(m.id) ?? null)), total, page, pageSize };
+    const { items, nextCursor } = pageOf(rows, take);
+    const seen = await this.lastSeen(items.map((r) => r.id));
+    return { items: items.map((m) => this.toMemberDto(user, m, seen.get(m.id) ?? null)), nextCursor, total };
   }
 
   async getMember(user: AuthUser, id: string) {
@@ -839,6 +879,8 @@ export class MembershipService {
       group: s.group ? { id: s.group.id, name: s.group.name, type: s.group.type } : null,
       visitorCount: s.visitorCount,
       firstTimerCount: s.firstTimerCount,
+      headcount: s.kind === 'CHURCH_SERVICE' ? (s.headcount ?? 0) : null,
+      newConvertCount: s.newConvertCount,
       notes: s.notes,
       recordedBy: s.recordedBy?.fullName ?? null,
       updatedAt: s.updatedAt.toISOString(),
@@ -870,9 +912,14 @@ export class MembershipService {
     let group: Awaited<ReturnType<MembershipService['loadGroup']>> | null = null;
     if (dto.groupId) {
       group = await this.loadGroup(dto.groupId);
+      // Members are recorded once, in their basonta; a constituency is the total of its basontas.
+      if (group.type === 'CONSTITUENCY') throw badRequest('CONSTITUENCY_TOTAL', 'A constituency’s attendance is the total of its basontas. Record attendance in each basonta instead.');
       if (!this.policy.canManageGroup(user, ref(group))) throw forbidden('Only this group’s leaders or a Super Admin can take its attendance');
-    } else if (!this.policy.canRecordSunday(user)) throw forbidden('Only pastors and Super Admins can record church services');
+    } else if (!this.policy.canRecordSunday(user)) throw forbidden('Church services are recorded by the ushers (the service-recording bacenta) or a Super Admin');
     const title = blank(dto.title) ?? null;
+    if (!group && serviceType.toLowerCase() === 'sunday service' && !SUNDAY_SERVICE_TITLES.some((t) => t === title)) {
+      throw badRequest('SERVICE_TITLE', `Choose which Sunday service: ${SUNDAY_SERVICE_TITLES.join(' or ')}`);
+    }
     const date = toDateOnly(dto.date);
     const kind: AttendanceKind = group ? 'GROUP_MEETING' : 'CHURCH_SERVICE';
     const existing = await this.prisma.attendanceSession.findFirst({
@@ -881,7 +928,9 @@ export class MembershipService {
     });
     if (existing) return { id: existing.id, created: false };
     try {
-      const s = await this.prisma.attendanceSession.create({ data: { kind, groupId: group?.id ?? null, date, serviceType, title, recordedById: user.id } });
+      const s = await this.prisma.attendanceSession.create({
+        data: { kind, groupId: group?.id ?? null, date, serviceType, title, recordedById: user.id, headcount: kind === 'CHURCH_SERVICE' ? 0 : null },
+      });
       await this.audit.record({ actorId: user.id, action: 'ATTENDANCE_CREATED', entityType: 'ATTENDANCE', entityId: s.id, metadata: { serviceType, title, date: dto.date, group: group?.name ?? null }, meta });
       return { id: s.id, created: true };
     } catch (e) {
@@ -901,7 +950,8 @@ export class MembershipService {
       this.prisma.guest.findMany({ where: { sessionId: id }, include: { broughtBy: { select: { id: true, fullName: true } }, convertedMember: { select: { id: true, fullName: true } } }, orderBy: { createdAt: 'asc' } }),
     ]);
     const presentIds = records.map((r) => r.memberId);
-    const roster = await this.prisma.member.findMany({
+    // Church services are head-counts only: no member roster.
+    const roster = s.kind === 'CHURCH_SERVICE' ? [] : await this.prisma.member.findMany({
       where: { OR: [{ ...where, isActive: true }, ...(presentIds.length ? [{ id: { in: presentIds } }] : [])] },
       select: {
         id: true,
@@ -936,8 +986,9 @@ export class MembershipService {
    */
   async saveSheet(user: AuthUser, id: string, dto: SheetInput, meta: ReqMeta): Promise<AttendanceSheetDto> {
     const { s, canEdit } = await this.sessionContext(user, id);
-    if (!canEdit) throw forbidden(s.group ? 'Only this group’s leaders or a Super Admin can take its attendance' : 'Only pastors and Super Admins can record church services');
+    if (!canEdit) throw forbidden(s.group ? 'Only this group’s leaders or a Super Admin can take its attendance' : 'Church services are recorded by the ushers or a Super Admin');
     if (dto.date) this.checkDate(dto.date);
+    if (s.kind === 'CHURCH_SERVICE') return this.saveServiceCounts(user, s, dto, meta);
     const roster = [...new Set(dto.rosterIds)];
     const present = [...new Set(dto.presentIds)].filter((x) => roster.includes(x));
     const existing = new Set((await this.prisma.member.findMany({ where: { id: { in: present } }, select: { id: true } })).map((m) => m.id));
@@ -976,10 +1027,51 @@ export class MembershipService {
     return this.getSheet(user, id);
   }
 
+  /** Church services: the ushers' head-count — total, of which visitors and new converts. */
+  private async saveServiceCounts(user: AuthUser, s: { id: string; serviceType: string; date: Date; headcount: number | null; visitorCount: number; newConvertCount: number }, dto: SheetInput, meta: ReqMeta) {
+    const total = dto.headcount ?? s.headcount ?? 0;
+    const visitors = dto.visitorCount ?? s.visitorCount;
+    const converts = dto.newConvertCount ?? s.newConvertCount;
+    if (visitors + converts > total) throw badRequest('COUNTS', 'Visitors and new converts can’t be more than the total');
+    const serviceType = dto.serviceType?.trim() || s.serviceType;
+    const title = dto.title === undefined ? undefined : (blank(dto.title) ?? null);
+    if (serviceType.toLowerCase() === 'sunday service' && title !== undefined && !SUNDAY_SERVICE_TITLES.some((t) => t === title)) {
+      throw badRequest('SERVICE_TITLE', `Choose which Sunday service: ${SUNDAY_SERVICE_TITLES.join(' or ')}`);
+    }
+    try {
+      await this.prisma.attendanceSession.update({
+        where: { id: s.id },
+        data: {
+          headcount: total,
+          visitorCount: visitors,
+          newConvertCount: converts,
+          notes: dto.notes === undefined ? undefined : (blank(dto.notes) ?? null),
+          serviceType,
+          title,
+          date: dto.date ? toDateOnly(dto.date) : undefined,
+          recordedById: user.id,
+        },
+      });
+    } catch (e) {
+      if (isUnique(e)) throw conflict('SESSION_EXISTS', 'That service is already recorded for that date.');
+      throw e;
+    }
+    await this.audit.record({
+      actorId: user.id,
+      action: 'ATTENDANCE_SAVED',
+      entityType: 'ATTENDANCE',
+      entityId: s.id,
+      metadata: { serviceType, date: dto.date ?? fromDateOnly(s.date), total, visitors, newConverts: converts },
+      meta,
+    });
+    return this.getSheet(user, s.id);
+  }
+
   /** Records how many people a member brought (0 = nobody) and who they were. Marks the member present. */
   async saveBrought(user: AuthUser, id: string, memberId: string, dto: BroughtInput, meta: ReqMeta): Promise<AttendanceSheetDto> {
     const { s, canEdit } = await this.sessionContext(user, id);
     if (!canEdit) throw forbidden();
+    if (s.kind === 'CHURCH_SERVICE') throw badRequest('INVALID', 'Church services are head-counts; record who someone brought in their basonta');
     if (dto.guests.length > dto.broughtCount) throw badRequest('INVALID', 'More names than the number brought');
     const member = await this.prisma.member.findUnique({ where: { id: memberId }, select: { fullName: true } });
     if (!member) throw notFound('Member');
@@ -1007,46 +1099,79 @@ export class MembershipService {
     await this.audit.record({ actorId: user.id, action: 'ATTENDANCE_DELETED', entityType: 'ATTENDANCE', entityId: id, metadata: { serviceType: s.serviceType, date: fromDateOnly(s.date), group: s.group?.name ?? null }, meta });
   }
 
-  async listSessions(user: AuthUser, q: { kind?: AttendanceKind; groupId?: string; from?: string; to?: string; mine?: boolean }): Promise<SessionRowDto[]> {
+  /** Groups this user leads, shepherds, or heads (basontas under their constituency). */
+  private async managedGroupIds(user: AuthUser): Promise<string[]> {
+    const rows = await this.prisma.churchGroup.findMany({
+      where: {
+        OR: [
+          ...(user.role === 'PASTOR' ? [{ pastorId: user.id }, { createdById: user.id }, { parent: { pastorId: user.id } }] : []),
+          { shepherds: { some: { userId: user.id } } },
+        ],
+      },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
+
+  /** Newest first, 20 at a time. `mine`: church services plus the groups this user looks after. */
+  async listSessions(
+    user: AuthUser,
+    q: { kind?: AttendanceKind; groupId?: string; from?: string; to?: string; mine?: boolean; cursor?: string; limit?: number },
+  ): Promise<Page<SessionRowDto>> {
     this.assertView(user);
+    const take = pageSize(q.limit);
+    const scope: Prisma.AttendanceSessionWhereInput =
+      q.mine && !this.policy.canViewChurchStats(user) ? { OR: [{ kind: 'CHURCH_SERVICE' }, { groupId: { in: await this.managedGroupIds(user) } }] } : {};
     const rows = await this.prisma.attendanceSession.findMany({
       where: {
+        ...scope,
         kind: q.kind,
         groupId: q.groupId,
         date: { gte: q.from ? toDateOnly(q.from) : undefined, lte: q.to ? toDateOnly(q.to) : undefined },
       },
       include: { group: { select: { id: true, name: true, type: true } }, _count: { select: { records: true, guests: true } } },
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      take: 200,
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      ...cursorArgs(q.cursor, take),
     });
-    return rows.map((s) => ({
-      id: s.id,
-      kind: s.kind,
-      serviceType: s.serviceType,
-      title: s.title,
-      date: fromDateOnly(s.date)!,
-      group: s.group,
-      present: s._count.records,
-      visitors: s.visitorCount,
-      firstTimers: s.firstTimerCount,
-      guests: s._count.guests,
-    }));
+    const { items, nextCursor } = pageOf(rows, take);
+    return {
+      items: items.map((s) => ({
+        id: s.id,
+        kind: s.kind,
+        serviceType: s.serviceType,
+        title: s.title,
+        date: fromDateOnly(s.date)!,
+        group: s.group,
+        present: s.kind === 'CHURCH_SERVICE' ? (s.headcount ?? s._count.records + s.visitorCount) : s._count.records,
+        visitors: s.visitorCount,
+        firstTimers: s.firstTimerCount,
+        newConverts: s.newConvertCount,
+        guests: s._count.guests,
+      })),
+      nextCursor,
+    };
   }
 
-  /** People brought who want to join and haven't been added as members yet. */
-  async pendingGuests(user: AuthUser): Promise<GuestDto[]> {
+  /** People brought who want to join and haven't been added as members yet (newest first, 20 at a time). */
+  async pendingGuests(user: AuthUser, q: { cursor?: string; limit?: number } = {}): Promise<Page<GuestDto> & { total: number }> {
     if (!this.policy.canAddMembers(user)) throw forbidden();
-    const rows = await this.prisma.guest.findMany({
-      where: { intent: 'JOINING', convertedMemberId: null },
-      include: {
-        broughtBy: { select: { id: true, fullName: true } },
-        convertedMember: { select: { id: true, fullName: true } },
-        session: { select: { id: true, date: true, serviceType: true, title: true, group: { select: { id: true, name: true } } } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
-    return rows.map((g) => this.guestDto(g));
+    const take = pageSize(q.limit);
+    const where: Prisma.GuestWhereInput = { intent: 'JOINING', convertedMemberId: null };
+    const [rows, total] = await Promise.all([
+      this.prisma.guest.findMany({
+        where,
+        include: {
+          broughtBy: { select: { id: true, fullName: true } },
+          convertedMember: { select: { id: true, fullName: true } },
+          session: { select: { id: true, date: true, serviceType: true, title: true, group: { select: { id: true, name: true } } } },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...cursorArgs(q.cursor, take),
+      }),
+      this.prisma.guest.count({ where }),
+    ]);
+    const { items, nextCursor } = pageOf(rows, take);
+    return { items: items.map((g) => this.guestDto(g)), nextCursor, total };
   }
 
   /**
@@ -1081,13 +1206,19 @@ export class MembershipService {
         include: { _count: { select: { records: true, guests: true } } },
         orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
       }),
-      this.prisma.$queryRaw<Array<{ sessionId: string; constituencyId: string | null; n: number }>>`
-        SELECT r."sessionId", m."constituencyId", count(*)::int AS n
-        FROM "AttendanceRecord" r
-        JOIN "AttendanceSession" s ON s.id = r."sessionId"
-        JOIN "Member" m ON m.id = r."memberId"
-        WHERE s."kind" = 'CHURCH_SERVICE' AND s."date" BETWEEN ${f}::date AND ${t}::date
-        GROUP BY 1, 2`,
+      // Each constituency per meeting day = the sum of its basontas (each member once per basonta).
+      this.prisma.$queryRaw<Array<{ id: string; average: number; days: number; last: Date | null }>>`
+        SELECT d.cid AS id, round(avg(d.total), 1)::float AS average, count(*)::int AS days, max(d.date) AS last
+        FROM (
+          SELECT b."parentId" AS cid, x.date, sum(x.n) AS total
+          FROM (
+            SELECT s."groupId", s."date" AS date, count(DISTINCT r."memberId") AS n
+            FROM "AttendanceSession" s LEFT JOIN "AttendanceRecord" r ON r."sessionId" = s.id
+            WHERE s."kind" = 'GROUP_MEETING' AND s."date" BETWEEN ${f}::date AND ${t}::date
+            GROUP BY 1, 2) x
+          JOIN "ChurchGroup" b ON b.id = x."groupId" AND b."type" = 'BASONTA' AND b."parentId" IS NOT NULL
+          GROUP BY 1, 2) d
+        GROUP BY 1`,
       this.prisma.churchGroup.findMany({ where: { type: 'CONSTITUENCY', isActive: true }, select: { id: true, name: true, _count: { select: { members: { where: { isActive: true } } } } }, orderBy: { name: 'asc' } }),
       this.prisma.churchGroup.findMany({ where: { type: { in: ['BASONTA', 'BACENTA'] }, isActive: true }, select: { id: true, name: true, type: true, _count: { select: activeCounts } }, orderBy: { name: 'asc' } }),
       this.prisma.churchGroup.findMany({ where: { isActive: true }, include: groupInclude, orderBy: [{ type: 'asc' }, { name: 'asc' }] }),
@@ -1112,18 +1243,15 @@ export class MembershipService {
         WHERE s."date" BETWEEN ${f}::date AND ${t}::date`,
     ]);
 
-    const conBySession = new Map<string, Record<string, number>>();
-    for (const r of byCon) {
-      const m = conBySession.get(r.sessionId) ?? {};
-      m[r.constituencyId ?? 'none'] = r.n;
-      conBySession.set(r.sessionId, m);
-    }
+    const conAvg = new Map(byCon.map((r) => [r.id, r]));
+    // Services are head-counts (older ones: members ticked + visitors).
+    const total = (s: (typeof services)[number]) => s.headcount ?? s._count.records + s.visitorCount;
     const types = new Map<string, { sessions: number; present: number }>();
     for (const s of services) {
       const k = s.serviceType;
       const v = types.get(k) ?? { sessions: 0, present: 0 };
       v.sessions++;
-      v.present += s._count.records;
+      v.present += total(s);
       types.set(k, v);
     }
     const stats = new Map(groupStats.map((s) => [s.groupId, s]));
@@ -1140,12 +1268,12 @@ export class MembershipService {
         date: fromDateOnly(s.date)!,
         serviceType: s.serviceType,
         title: s.title,
-        present: s._count.records,
+        total: total(s),
+        members: Math.max(0, total(s) - s.visitorCount - s.newConvertCount),
         visitors: s.visitorCount,
-        firstTimers: s.firstTimerCount,
-        guests: s._count.guests,
-        byConstituency: conBySession.get(s.id) ?? {},
+        newConverts: s.newConvertCount,
       })),
+      constituencyAverages: constituencies.map((c) => ({ id: c.id, name: c.name, average: conAvg.get(c.id)?.average ?? 0, days: conAvg.get(c.id)?.days ?? 0 })),
       serviceTypes: [...types.entries()]
         .map(([serviceType, v]) => ({ serviceType, sessions: v.sessions, averagePresent: Math.round((v.present / v.sessions) * 10) / 10 }))
         .sort((a, b) => b.sessions - a.sessions),
@@ -1154,6 +1282,18 @@ export class MembershipService {
       bacentas: basontas.filter((c) => c.type === 'BACENTA').map((c) => ({ id: c.id, name: c.name, members: c._count.bacentaMembers })),
       groups: groups.map((g) => {
         const s = stats.get(g.id);
+        const c = g.type === 'CONSTITUENCY' ? conAvg.get(g.id) : undefined;
+        if (g.type === 'CONSTITUENCY')
+          return {
+            id: g.id,
+            type: g.type,
+            name: g.name,
+            pastor: g.pastor?.fullName ?? null,
+            members: countFor(g.type, g._count),
+            meetings: c?.days ?? 0,
+            averagePresent: c?.average ?? 0,
+            lastMeeting: fromDateOnly(c?.last ?? null),
+          };
         return {
           id: g.id,
           type: g.type,

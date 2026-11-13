@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { GROUP_TYPE_LABELS, MEETING_TYPE_SUGGESTIONS, SERVICE_TYPE_SUGGESTIONS } from '@wcc/shared';
+import { GROUP_TYPE_LABELS, MEETING_TYPE_SUGGESTIONS, SERVICE_TYPE_SUGGESTIONS, SUNDAY_SERVICE_TITLES } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/form';
 import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
@@ -19,7 +19,8 @@ function NewSession() {
   const router = useRouter();
   const me = useMe();
   const groups = useGroups();
-  const mine = (groups.data ?? []).filter((g) => g.canManage && g.isActive);
+  // Constituencies don't record: they're the total of their basontas.
+  const mine = (groups.data ?? []).filter((g) => g.canManage && g.isActive && g.type !== 'CONSTITUENCY');
   const canChurch = !!me.data?.permissions.canRecordSunday;
   const [groupId, setGroupId] = useState(params.get('groupId') ?? '');
   const [serviceType, setServiceType] = useState('');
@@ -40,6 +41,10 @@ function NewSession() {
   }, [isGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const type = serviceType === '__other' ? custom.trim() : serviceType;
+  const sunday = !isGroup && type.toLowerCase() === 'sunday service';
+  useEffect(() => {
+    if (sunday && !SUNDAY_SERVICE_TITLES.some((t) => t === title)) setTitle(SUNDAY_SERVICE_TITLES[0]);
+  }, [sunday]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = useMutation({
     mutationFn: () => api<{ id: string; created: boolean }>('/attendance/sessions', { method: 'POST', body: { groupId: groupId || null, serviceType: type, title: title.trim() || null, date } }),
     onSuccess: (r) => {
@@ -50,11 +55,12 @@ function NewSession() {
   });
 
   if (me.isLoading || groups.isLoading) return <PageLoader />;
-  if (!canChurch && !mine.length) return <EmptyState title="You can’t record attendance yet">Pastors record church services; group leaders record their group’s meetings.</EmptyState>;
+  if (!canChurch && !mine.length)
+    return <EmptyState title="You can’t record attendance yet">The ushers record church services; basonta and bacenta leaders record their meetings.</EmptyState>;
 
   return (
     <>
-      <PageHeader title="Record attendance" subtitle="Services, all-nights, camps, conferences or group meetings.">
+      <PageHeader title="Record attendance" subtitle="Church services (head-counts) or a basonta/bacenta meeting.">
         <Link href="/church/attendance" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
           <ArrowLeft className="h-4 w-4" /> Attendance
         </Link>
@@ -92,9 +98,22 @@ function NewSession() {
               <Input id="ns-custom" required minLength={2} maxLength={40} placeholder="e.g. Easter convention" value={custom} onChange={(e) => setCustom(e.target.value)} autoFocus />
             </Field>
           )}
-          <Field label="Title (optional)" htmlFor="ns-title" hint="To tell apart two of the same on one day, e.g. “1st service”, “Day 2”.">
-            <Input id="ns-title" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />
-          </Field>
+          {sunday ? (
+            <Field label="Which service" htmlFor="ns-title">
+              <Select id="ns-title" value={title} onChange={(e) => setTitle(e.target.value)}>
+                {SUNDAY_SERVICE_TITLES.map((t) => (
+                  <option key={t} value={t}>
+                    {t[0]!.toUpperCase() + t.slice(1)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <Field label="Title (optional)" htmlFor="ns-title" hint="To tell apart two of the same on one day, e.g. “Day 2”.">
+              <Input id="ns-title" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />
+            </Field>
+          )}
+          {!isGroup && <p className="text-xs text-muted">Church services are head-counts: you’ll enter the total, visitors and new converts. Members are recorded in their basontas.</p>}
           <Field label="Date" htmlFor="ns-date">
             <Input id="ns-date" type="date" required max={localDate()} value={date} onChange={(e) => setDate(e.target.value)} />
           </Field>

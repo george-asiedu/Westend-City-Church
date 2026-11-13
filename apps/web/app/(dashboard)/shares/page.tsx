@@ -8,6 +8,8 @@ import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '
 import { api, errorMessage } from '@/lib/api';
 import { qk } from '@/lib/queries';
 import { formatDateTime } from '@/lib/utils';
+import { useCursorList } from '@/lib/membership';
+import { LoadMore } from '@/components/ui/load-more';
 
 interface ShareRow {
   id: string;
@@ -28,17 +30,17 @@ interface ShareRow {
 
 export default function SharesPage() {
   const qc = useQueryClient();
-  const shares = useQuery({ queryKey: qk.shares(), queryFn: () => api<ShareRow[]>('/shares') });
+  const shares = useCursorList<ShareRow>(qk.shares(), '/shares');
   return (
     <>
       <PageHeader title="Share links" subtitle="Time-limited links for people outside the church system. Create them from an event or a selection." />
       {shares.isLoading ? (
         <PageLoader />
-      ) : !shares.data?.length ? (
+      ) : !shares.items.length ? (
         <EmptyState icon={<Link2 className="h-8 w-8" />} title="No share links yet" />
       ) : (
         <div className="space-y-2">
-          {shares.data.map((s) => (
+          {shares.items.map((s) => (
             <Card key={s.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-2 font-medium">
@@ -86,6 +88,7 @@ export default function SharesPage() {
               </div>
             </Card>
           ))}
+          <LoadMore hasMore={!!shares.hasNextPage} loading={shares.isFetchingNextPage} onClick={shares.more} shown={shares.items.length} />
         </div>
       )}
     </>

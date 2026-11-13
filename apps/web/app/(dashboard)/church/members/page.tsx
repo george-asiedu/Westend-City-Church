@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Download, Phone, Plus, Users } from 'lucide-react';
+import { Download, Phone, Plus, Users } from 'lucide-react';
+import type { MemberDto } from '@wcc/shared';
+import { LoadMore } from '@/components/ui/load-more';
+import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form';
 import { Badge, Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
-import { api, errorMessage } from '@/lib/api';
+import { errorMessage } from '@/lib/api';
 import { useMe } from '@/lib/queries';
-import { bacentaLabel, canAddMembers, downloadCsv, formatDay, mk, useGroups, type MemberPage } from '@/lib/membership';
+import { cn } from '@/lib/utils';
+import { bacentaLabel, canAddMembers, downloadCsv, fetchAll, formatDay, mk, useCursorList, useGroups } from '@/lib/membership';
 
 export default function MembersPage() {
   const me = useMe();
@@ -24,25 +27,23 @@ export default function MembersPage() {
   const [constituencyId, setConstituencyId] = useState('');
   const [basontaId, setBasontaId] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive' | 'all'>('active');
-  const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
   const [exporting, setExporting] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => (setDebounced(q.trim()), setPage(1)), 300);
+    const t = setTimeout(() => setDebounced(q.trim()), 300);
     return () => clearTimeout(t);
   }, [q]);
-  const params = { q: debounced, constituencyId, basontaId, bacentaId, status, page, limit: 50 };
-  const members = useQuery({ queryKey: mk.members(params), queryFn: () => api<MemberPage>('/members', { query: params }), placeholderData: keepPreviousData });
+  const params = { q: debounced, constituencyId, basontaId, bacentaId, status };
+  const members = useCursorList<MemberDto>(mk.members(params), '/members', params);
   const p = me.data?.permissions;
   if (me.isLoading) return <PageLoader />;
   if (!p?.canViewMembership) return <EmptyState title="You don’t have access to member records" />;
-  const data = members.data;
-  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+  const items = members.items;
 
   const exportAll = async () => {
     setExporting(true);
     try {
-      const all = await api<MemberPage>('/members', { query: { ...params, page: 1, limit: 500 } });
+      const all = { items: await fetchAll<MemberDto>('/members', params) };
       downloadCsv('members.csv', [
         ['Name', 'Role', 'Phone', 'Email', 'Gender', 'Where they stay', 'Constituency', 'Basonta', 'Bacentas (teams)', 'Date of birth', 'Joined', 'Active', 'Last seen'],
         ...all.items.map((m) => [
@@ -61,7 +62,7 @@ export default function MembersPage() {
           m.lastSeen,
         ]),
       ]);
-      toast.success(all.total > all.items.length ? `Exported the first ${all.items.length} of ${all.total} members` : `Exported ${all.items.length} members`);
+      toast.success(`Exported ${all.items.length} members`);
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -90,7 +91,7 @@ export default function MembersPage() {
       <ChurchTabs />
       <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5 [&>*]:min-w-0">
         <Input placeholder="Search name, phone, area, role…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <Select value={constituencyId} onChange={(e) => (setConstituencyId(e.target.value), setPage(1))} aria-label="Constituency">
+        <Select value={constituencyId} onChange={(e) => setConstituencyId(e.target.value)} aria-label="Constituency">
           <option value="">All constituencies</option>
           <option value="none">No constituency</option>
           {constituencies.data?.map((c) => (
@@ -99,7 +100,7 @@ export default function MembersPage() {
             </option>
           ))}
         </Select>
-        <Select value={basontaId} onChange={(e) => (setBasontaId(e.target.value), setPage(1))} aria-label="Basonta">
+        <Select value={basontaId} onChange={(e) => setBasontaId(e.target.value)} aria-label="Basonta">
           <option value="">All basontas</option>
           <option value="none">No basonta</option>
           {basontas.data?.map((b) => (
@@ -109,7 +110,7 @@ export default function MembersPage() {
             </option>
           ))}
         </Select>
-        <Select value={bacentaId} onChange={(e) => (setBacentaId(e.target.value), setPage(1))} aria-label="Bacenta">
+        <Select value={bacentaId} onChange={(e) => setBacentaId(e.target.value)} aria-label="Bacenta">
           <option value="">All bacentas</option>
           {bacentas.data?.map((b) => (
             <option key={b.id} value={b.id}>
@@ -117,59 +118,59 @@ export default function MembersPage() {
             </option>
           ))}
         </Select>
-        <Select value={status} onChange={(e) => (setStatus(e.target.value as typeof status), setPage(1))} aria-label="Status">
+        <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} aria-label="Status">
           <option value="active">Active members</option>
           <option value="inactive">Inactive</option>
           <option value="all">Everyone</option>
         </Select>
       </div>
 
-      {!data ? (
+      {members.isLoading ? (
         <PageLoader />
-      ) : data.items.length ? (
+      ) : items.length ? (
         <Card className="overflow-hidden">
           <p className="border-b border-border px-4 py-2 text-xs text-muted">
-            {data.total} member{data.total === 1 ? '' : 's'}
+            {members.total ?? items.length} member{members.total === 1 ? '' : 's'}
           </p>
           {/* Table on wide screens, list on phones. */}
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full text-left text-sm">
-              <thead className="text-xs uppercase tracking-wide text-muted">
-                <tr className="border-b border-border">
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Role</th>
-                  <th className="px-4 py-2 font-medium">Phone</th>
-                  <th className="px-4 py-2 font-medium">Where they stay</th>
-                  <th className="px-4 py-2 font-medium">Constituency</th>
-                  <th className="px-4 py-2 font-medium">Basonta</th>
-                  <th className="px-4 py-2 font-medium">Bacentas</th>
-                  <th className="px-4 py-2 font-medium">Last seen</th>
+          <div className="hidden p-3 md:block">
+            <Table>
+              <THead>
+                <tr>
+                  <Th>Name</Th>
+                  <Th>Role</Th>
+                  <Th>Phone</Th>
+                  <Th>Where they stay</Th>
+                  <Th>Constituency</Th>
+                  <Th>Basonta</Th>
+                  <Th>Bacentas</Th>
+                  <Th>Last seen</Th>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.items.map((m) => (
-                  <tr key={m.id} className="hover:bg-surface-2">
-                    <td className="px-4 py-2.5">
+              </THead>
+              <TBody>
+                {items.map((m) => (
+                  <Tr key={m.id}>
+                    <Td>
                       <Link href={`/church/members/${m.id}`} className="font-medium hover:text-brand">
                         {m.fullName}
                       </Link>
                       {!m.isActive && <Badge tone="warning" className="ml-2">Inactive</Badge>}
-                    </td>
-                    <td className="px-4 py-2.5">{m.churchRole}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5">{m.phone ? <a href={`tel:${m.phone}`} className="text-brand hover:underline">{m.phone}</a> : '—'}</td>
-                    <td className="px-4 py-2.5">{m.location ?? '—'}</td>
-                    <td className="px-4 py-2.5">{m.constituency?.name ?? '—'}</td>
-                    <td className="px-4 py-2.5">{m.basonta?.name ?? '—'}</td>
-                    <td className="px-4 py-2.5">{m.bacentas.map(bacentaLabel).join(', ') || '—'}</td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-muted">{m.lastSeen ? formatDay(m.lastSeen) : 'Never'}</td>
-                  </tr>
+                    </Td>
+                    <Td>{m.churchRole}</Td>
+                    <Td className="whitespace-nowrap">{m.phone ? <a href={`tel:${m.phone}`} className="text-brand hover:underline">{m.phone}</a> : '—'}</Td>
+                    <Td>{m.location ?? '—'}</Td>
+                    <Td>{m.constituency?.name ?? '—'}</Td>
+                    <Td>{m.basonta?.name ?? '—'}</Td>
+                    <Td className="max-w-xs whitespace-normal">{m.bacentas.map(bacentaLabel).join(', ') || '—'}</Td>
+                    <Td className="whitespace-nowrap text-muted">{m.lastSeen ? formatDay(m.lastSeen) : 'Never'}</Td>
+                  </Tr>
                 ))}
-              </tbody>
-            </table>
+              </TBody>
+            </Table>
           </div>
           <ul className="divide-y divide-border md:hidden">
-            {data.items.map((m) => (
-              <li key={m.id} className="flex min-w-0 items-center gap-3 px-4 py-3">
+            {items.map((m, i) => (
+              <li key={m.id} className={cn('flex min-w-0 items-center gap-3 px-4 py-3', i % 2 === 1 && 'bg-surface-2/50')}>
                 <Link href={`/church/members/${m.id}`} className="min-w-0 flex-1">
                   <p className="truncate font-medium">
                     {m.fullName} {!m.isActive && <Badge tone="warning">Inactive</Badge>}
@@ -186,19 +187,9 @@ export default function MembersPage() {
               </li>
             ))}
           </ul>
-          {pages > 1 && (
-            <div className="flex items-center justify-between border-t border-border px-4 py-2 text-sm">
-              <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => setPage((x) => x - 1)}>
-                <ChevronLeft className="h-4 w-4" /> Previous
-              </Button>
-              <span className="text-muted">
-                Page {page} of {pages}
-              </span>
-              <Button size="sm" variant="ghost" disabled={page >= pages} onClick={() => setPage((x) => x + 1)}>
-                Next <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          <div className="border-t border-border">
+            <LoadMore hasMore={!!members.hasNextPage} loading={members.isFetchingNextPage} onClick={members.more} shown={items.length} total={members.total} />
+          </div>
         </Card>
       ) : (
         <EmptyState icon={<Users className="h-8 w-8" />} title={debounced || constituencyId || basontaId || bacentaId ? 'No members match' : 'No members yet'}>

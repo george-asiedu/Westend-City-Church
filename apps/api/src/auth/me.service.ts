@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PolicyService } from '../policy/policy.service';
 import type { Grant } from '../common/auth-user';
 import { notFound } from '../common/errors';
+import { isServiceRecorder } from '../common/guards';
 
 @Injectable()
 export class MeService {
@@ -17,7 +18,7 @@ export class MeService {
     const rolePermissions = new Set(
       (await this.prisma.rolePermission.findMany({ where: { role: u.role }, select: { permission: true } })).map((r) => r.permission),
     );
-    const p = { id: u.id, role: u.role, grants, rolePermissions };
+    const p = { id: u.id, role: u.role, grants, rolePermissions, serviceRecorder: await isServiceRecorder(this.prisma, u.id) };
     const isAdmin = this.policy.isAdmin(p);
     return {
       id: u.id,

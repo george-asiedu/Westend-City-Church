@@ -11,7 +11,7 @@ import { EventsService } from '../events/events.service';
 import { QueueService } from '../queue/queue.service';
 import { AppException, badRequest, forbidden, notFound } from '../common/errors';
 import { randomToken, safeEqual, sha256 } from '../common/crypto';
-import { clampLimit, fromDateOnly } from '../common/pagination';
+import { clampLimit, cursorArgs, fromDateOnly, pageOf, pageSize } from '../common/pagination';
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 import { HttpStatus } from '@nestjs/common';
@@ -132,15 +132,18 @@ export class SharesService {
     };
   }
 
-  async list(user: AuthUser, eventId?: string) {
+  /** Newest first, 20 at a time. */
+  async list(user: AuthUser, eventId?: string, cursor?: string, limit?: number) {
     this.assertEnabled();
+    const take = pageSize(limit);
     const rows = await this.prisma.shareLink.findMany({
       where: { eventId, ...(this.policy.isAdmin(user) ? {} : { createdById: user.id }) },
       include: { media: { select: { mediaId: true } }, createdBy: { select: { id: true, fullName: true } }, event: { select: { id: true, title: true } } },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...cursorArgs(cursor, take),
     });
-    return rows.map((r) => ({ ...this.summary(r), createdBy: r.createdBy, event: r.event }));
+    const { items, nextCursor } = pageOf(rows, take);
+    return { items: items.map((r) => ({ ...this.summary(r), createdBy: r.createdBy, event: r.event })), nextCursor };
   }
 
   async revoke(user: AuthUser, id: string, meta: ReqMeta): Promise<void> {

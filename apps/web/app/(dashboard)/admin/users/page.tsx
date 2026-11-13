@@ -13,6 +13,8 @@ import { AccessGrid, type GrantRow } from '@/components/layout/access-grid';
 import { api, errorMessage } from '@/lib/api';
 import { qk, useCategories, useMe } from '@/lib/queries';
 import { formatDateTime } from '@/lib/utils';
+import { useCursorList } from '@/lib/membership';
+import { LoadMore } from '@/components/ui/load-more';
 
 interface UserRow {
   id: string;
@@ -196,7 +198,7 @@ export default function UsersPage() {
   const [q, setQ] = useState('');
   const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
-  const users = useQuery({ queryKey: qk.users({ q }), queryFn: () => api<UserRow[]>('/users', { query: { q: q || undefined } }) });
+  const users = useCursorList<UserRow>(qk.users({ q }), '/users', { q: q || undefined });
   const invites = useQuery({ queryKey: qk.invitations, queryFn: () => api<InviteRow[]>('/invitations') });
 
   return (
@@ -214,7 +216,7 @@ export default function UsersPage() {
         <PageLoader />
       ) : (
         <Card className="divide-y divide-border">
-          {users.data?.map((u) => (
+          {users.items.map((u) => (
             <button key={u.id} onClick={() => setEditing(u)} className="flex w-full items-center gap-3 p-3 text-left hover:bg-surface-2">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/15 text-sm font-semibold text-brand">{u.fullName.slice(0, 1)}</div>
               <div className="min-w-0 flex-1">
@@ -233,6 +235,7 @@ export default function UsersPage() {
               </div>
             </button>
           ))}
+          <LoadMore hasMore={!!users.hasNextPage} loading={users.isFetchingNextPage} onClick={users.more} shown={users.items.length} total={users.total} />
         </Card>
       )}
 

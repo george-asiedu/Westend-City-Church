@@ -44,10 +44,9 @@ export function GroupStatsPanel({ groupId, groupName }: { groupId: string; group
         q.isLoading && <PageLoader />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Stat label="Members" value={s.members} />
             <Stat label="Meetings" value={s.meetings.length} sub={`avg ${s.averagePresent} present`} />
-            <Stat label="At church services" value={s.churchServices.sessions ? s.churchServices.averagePresent : '—'} sub={s.churchServices.sessions ? `avg of ${s.churchServices.sessions} services` : 'No services recorded'} />
             <Stat label="People brought" value={s.guests.visit + s.guests.joining} sub={`${s.guests.converted} became members`} />
           </div>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 [&>*]:min-w-0">

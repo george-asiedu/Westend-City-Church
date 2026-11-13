@@ -108,6 +108,14 @@ export interface MediaDto {
 // ---------------------------------------------------------------- Membership & attendance
 
 export type GroupTypeKey = 'CONSTITUENCY' | 'BASONTA' | 'BACENTA';
+
+/** A cursor-paginated list: pass nextCursor back as ?cursor= for the next page. */
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+  /** Total matching rows, where cheap to count. */
+  total?: number;
+}
 export interface MemberRefDto {
   id: string;
   fullName: string;
@@ -144,6 +152,8 @@ export interface GroupDto {
   roles: Array<TeamRoleDto & { memberCount: number; lead: MemberRefDto | null }>;
   /** A bacenta's overall team lead. */
   lead: MemberRefDto | null;
+  /** Bacentas: its pastor and shepherds record church-service head-counts (e.g. Ushers). */
+  recordsServices: boolean;
   memberCount: number;
   lastMeeting: { id: string; date: string; present: number } | null;
   /** Take attendance and manage members (pastor, shepherds, admins). */
@@ -190,6 +200,9 @@ export interface SessionInfoDto {
   group: { id: string; name: string; type: GroupTypeKey } | null;
   visitorCount: number;
   firstTimerCount: number;
+  /** Church services: total head-count (members + visitors + new converts). */
+  headcount: number | null;
+  newConvertCount: number;
   notes: string | null;
   recordedBy: string | null;
   updatedAt: string;
@@ -212,9 +225,11 @@ export interface SessionRowDto {
   title: string | null;
   date: string;
   group: { id: string; name: string; type: GroupTypeKey } | null;
+  /** Church services: the head-count; group meetings: members ticked. */
   present: number;
   visitors: number;
   firstTimers: number;
+  newConverts: number;
   guests: number;
 }
 
@@ -222,17 +237,19 @@ export interface AttendanceSummaryDto {
   from: string;
   to: string;
   activeMembers: number;
+  /** Church services (head-counts). */
   services: Array<{
     id: string;
     date: string;
     serviceType: string;
     title: string | null;
-    present: number;
+    total: number;
+    members: number;
     visitors: number;
-    firstTimers: number;
-    guests: number;
-    byConstituency: Record<string, number>;
+    newConverts: number;
   }>;
+  /** Average per meeting day of each constituency's basonta total. */
+  constituencyAverages: Array<{ id: string; name: string; average: number; days: number }>;
   serviceTypes: Array<{ serviceType: string; sessions: number; averagePresent: number }>;
   constituencies: Array<{ id: string; name: string; members: number }>;
   basontas: Array<{ id: string; name: string; members: number }>;
@@ -264,8 +281,6 @@ export interface GroupStatsDto {
   guests: { visit: number; joining: number; converted: number };
   /** Constituencies: meetings are per-date sums of their basontas. */
   sumOfBasontas: boolean;
-  /** Group members at church-wide services in the period */
-  churchServices: { sessions: number; averagePresent: number };
 }
 
 export interface LeaderDto {

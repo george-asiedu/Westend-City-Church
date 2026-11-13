@@ -69,6 +69,8 @@ export const SERVICE_TYPE_SUGGESTIONS = [
   'Special service',
   'Outreach',
 ];
+/** Sunday services are recorded per service. */
+export const SUNDAY_SERVICE_TITLES = ['1st service', '2nd service'] as const;
 export const MEETING_TYPE_SUGGESTIONS = ['Meeting', 'Rehearsal', 'Prayer meeting', 'Outreach', 'Retreat', 'Camp'];
 
 export const GUEST_INTENT_LABELS = { VISIT: 'Just visiting', JOINING: 'Wants to join' } as const;

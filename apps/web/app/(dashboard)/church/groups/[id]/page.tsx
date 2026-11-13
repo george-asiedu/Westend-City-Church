@@ -16,7 +16,9 @@ import { GroupStatsPanel } from '@/components/church/group-stats';
 import { AddExistingDialog, BasontasCard, MemberTeamsDialog, TeamsCard } from '@/components/church/group-parts';
 import { api, errorMessage } from '@/lib/api';
 import { useMe } from '@/lib/queries';
-import { bacentaLabel, downloadCsv, formatDay, memberDefaultsFor, mk, sessionName, useGroups, useShepherdCandidates, type MemberPage, type SessionRow } from '@/lib/membership';
+import { bacentaLabel, downloadCsv, fetchAll, formatDay, memberDefaultsFor, mk, sessionName, useCursorList, useGroups, useShepherdCandidates, type SessionRow } from '@/lib/membership';
+import { LoadMore } from '@/components/ui/load-more';
+import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 const isLeaderRole = (r: string) => /shepherd|leader|pastor|overseer/i.test(r);
@@ -145,22 +147,22 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const group = useQuery({ queryKey: mk.group(id), queryFn: () => api<GroupDto & { createdAt: string }>(`/groups/${id}`) });
   const g = group.data;
   const filter = g ? (g.type === 'CONSTITUENCY' ? { constituencyId: id } : g.type === 'BASONTA' ? { basontaId: id } : { bacentaId: id }) : {};
-  const members = useQuery({ queryKey: mk.members({ ...filter, limit: 500 }), queryFn: () => api<MemberPage>('/members', { query: { ...filter, limit: 500 } }), enabled: !!g });
-  const sessions = useQuery({ queryKey: mk.sessions({ groupId: id }), queryFn: () => api<SessionRow[]>('/attendance/sessions', { query: { groupId: id } }), enabled: !!g });
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  // Searching and filtering happen on the server; 20 members at a time.
+  const listQuery = { ...filter, q: debounced || undefined, leaders: leadersOnly || undefined, teamRoleId: team || undefined };
+  const members = useCursorList<MemberDto>(mk.members(listQuery), '/members', listQuery, !!g);
+  const sessions = useCursorList<SessionRow>(mk.sessions({ groupId: id }), '/attendance/sessions', { groupId: id }, !!g && g.type !== 'CONSTITUENCY');
 
   if (group.isLoading) return <PageLoader />;
   if (!g) return <EmptyState title="Group not found">{group.error ? errorMessage(group.error) : null}</EmptyState>;
   const canStats = g.canManage || !!me.data?.permissions.canViewChurchStats;
-  const term = q.trim().toLowerCase();
-  const all = members.data?.items ?? [];
-  const leaders = all.filter((m) => isLeaderRole(m.churchRole));
+  const term = debounced;
+  const list = members.items;
   const teamsOf = (m: MemberDto) => m.bacentas.find((b) => b.id === id)?.roles ?? [];
-  const list = all.filter(
-    (m) =>
-      (!leadersOnly || isLeaderRole(m.churchRole)) &&
-      (!team || (team === 'none' ? !teamsOf(m).length : teamsOf(m).some((r) => r.id === team))) &&
-      (!term || [m.fullName, m.phone, m.location, m.churchRole, ...teamsOf(m).map((r) => r.name)].some((v) => v?.toLowerCase().includes(term))),
-  );
 
   return (
     <>
@@ -188,7 +190,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         }
         actions={
           <>
-            {g.canManage && (
+            {g.canManage && g.type !== 'CONSTITUENCY' && (
               <Link href={`/church/attendance/new?groupId=${id}`}>
                 <Button>
                   <ClipboardCheck className="h-4 w-4" /> Take attendance
@@ -235,7 +237,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               )}
             </Card>
             {g.type === 'CONSTITUENCY' && <BasontasCard g={g} onAdd={() => setAddingBasonta(true)} />}
-            {g.type === 'BACENTA' && <TeamsCard g={g} members={all} />}
+            {g.type === 'BACENTA' && <TeamsCard g={g} />}
             <ShepherdsCard g={g} />
             {g.description && (
               <Card className="p-4 text-sm">
@@ -244,9 +246,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             )}
             <Card className="space-y-3 p-4">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Meetings</h2>
-              {sessions.data?.length ? (
+              {g.type === 'CONSTITUENCY' ? (
+                <p className="text-sm text-muted">
+                  A constituency’s attendance is the total of its basontas. See it under Statistics, or on the Attendance tab’s “By constituency”.
+                </p>
+              ) : sessions.items.length ? (
+                <>
                 <ul className="divide-y divide-border text-sm">
-                  {sessions.data.slice(0, 12).map((s) => (
+                  {sessions.items.map((s) => (
                     <li key={s.id}>
                       <Link href={`/church/attendance/s/${s.id}`} className="flex min-w-0 items-center justify-between gap-2 py-2 hover:text-brand">
                         <span className="min-w-0 truncate">
@@ -260,6 +267,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     </li>
                   ))}
                 </ul>
+                <LoadMore hasMore={!!sessions.hasNextPage} loading={sessions.isFetchingNextPage} onClick={sessions.more} shown={sessions.items.length} />
+                </>
               ) : (
                 <p className="text-sm text-muted">No meetings recorded yet.</p>
               )}
@@ -290,12 +299,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
           <Card className="space-y-3 p-4 lg:col-span-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="mr-auto font-semibold">Members ({members.data?.total ?? g.memberCount})</h2>
+              <h2 className="mr-auto font-semibold">Members ({g.memberCount})</h2>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!all.length}
-                onClick={() =>
+                disabled={!g.memberCount}
+                onClick={async () => {
+                  const all = await fetchAll<MemberDto>('/members', filter);
                   downloadCsv(`${g.name} members.csv`, [
                     ['Name', 'Role', ...(g.type === 'BACENTA' ? ['Teams'] : []), 'Phone', 'Where they stay', 'Constituency', 'Basonta', 'Bacentas', 'Last seen'],
                     ...all.map((m) => [
@@ -309,8 +319,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       m.bacentas.map(bacentaLabel).join('; '),
                       m.lastSeen,
                     ]),
-                  ])
-                }
+                  ]);
+                }}
               >
                 <Download className="h-4 w-4" /> CSV
               </Button>
@@ -343,7 +353,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   All
                 </button>
                 <button onClick={() => setLeadersOnly(true)} aria-pressed={leadersOnly} className={cn('rounded-md px-3 py-1.5', leadersOnly ? 'bg-surface-2 font-medium' : 'text-muted')}>
-                  Shepherds & leaders ({leaders.length})
+                  Shepherds & leaders
                 </button>
               </div>
             </div>
@@ -413,8 +423,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="py-6 text-center text-sm text-muted">{term || leadersOnly ? 'No members match.' : 'No members yet.'}</p>
+            ) : null}
+            {!members.isLoading && list.length > 0 && <LoadMore hasMore={!!members.hasNextPage} loading={members.isFetchingNextPage} onClick={members.more} shown={list.length} total={members.total} />}
+            {!members.isLoading && !list.length && (
+              <p className="py-6 text-center text-sm text-muted">{term || leadersOnly || team ? 'No members match.' : 'No members yet.'}</p>
             )}
           </Card>
         </div>

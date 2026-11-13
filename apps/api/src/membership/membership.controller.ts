@@ -64,6 +64,7 @@ class UpdateGroupDto {
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsUUID() parentId?: string;
   @IsOptional() @ValidateIf(nullable) @IsUUID() leadMemberId?: string | null;
+  @IsOptional() @IsBoolean() recordsServices?: boolean;
 }
 class GroupQuery {
   @IsOptional() @IsEnum(GroupType) type?: GroupType;
@@ -97,11 +98,12 @@ class MemberQuery {
   @IsOptional() @ValidateIf((_, v) => v !== 'none') @IsUUID() constituencyId?: string;
   @IsOptional() @ValidateIf((_, v) => v !== 'none') @IsUUID() basontaId?: string;
   @IsOptional() @IsUUID() bacentaId?: string;
-  @IsOptional() @IsUUID() teamRoleId?: string;
+  @IsOptional() @ValidateIf((_, v) => v !== 'none') @IsUUID() teamRoleId?: string;
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true' || value === '1') @IsBoolean() leaders?: boolean;
   @IsOptional() @IsString() @MaxLength(60) churchRole?: string;
   @IsOptional() @IsIn(['active', 'inactive', 'all']) status?: 'active' | 'inactive' | 'all';
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) limit?: number;
+  @IsOptional() @IsString() @MaxLength(200) cursor?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
 }
 
 class SessionDto {
@@ -119,6 +121,8 @@ class SheetDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(40) serviceType?: string;
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(120) title?: string | null;
   @IsOptional() @Matches(DATE) date?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(1000000) headcount?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(1000000) newConvertCount?: number;
 }
 class GuestInputDto {
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(120) fullName?: string | null;
@@ -129,11 +133,22 @@ class BroughtDto {
   @IsInt() @Min(0) @Max(200) broughtCount!: number;
   @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => GuestInputDto) guests!: GuestInputDto[];
 }
-class SessionQuery {
+class PageQuery {
+  @IsOptional() @IsString() @MaxLength(200) cursor?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
+}
+class LeadersQuery extends PageQuery {
+  @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @IsIn(['PASTOR', 'SHEPHERD']) role?: 'PASTOR' | 'SHEPHERD';
+  @IsOptional() @IsIn(['new', 'unassigned']) show?: 'new' | 'unassigned';
+}
+class SessionQuery extends PageQuery {
   @IsOptional() @IsEnum(AttendanceKind) kind?: AttendanceKind;
   @IsOptional() @IsUUID() groupId?: string;
   @IsOptional() @Matches(DATE) from?: string;
   @IsOptional() @Matches(DATE) to?: string;
+  /** Church services plus the groups this user looks after. */
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true' || value === '1') @IsBoolean() mine?: boolean;
 }
 class DayQuery {
   @Matches(DATE) date!: string;
@@ -165,8 +180,8 @@ export class GroupsController {
 
   /** Every pastor and shepherd (Super Admin). */
   @Get('leaders')
-  leaders(@CurrentUser() user: AuthUser) {
-    return this.svc.leaders(user);
+  leaders(@CurrentUser() user: AuthUser, @Query() q: LeadersQuery) {
+    return this.svc.leaders(user, q);
   }
 
   @Get(':id')
@@ -320,8 +335,8 @@ export class AttendanceController {
 
   /** People brought who want to join and aren't members yet. */
   @Get('guests/pending')
-  pendingGuests(@CurrentUser() user: AuthUser) {
-    return this.svc.pendingGuests(user);
+  pendingGuests(@CurrentUser() user: AuthUser, @Query() q: PageQuery) {
+    return this.svc.pendingGuests(user, q);
   }
 
   /** One day by constituency (sum of basontas). */

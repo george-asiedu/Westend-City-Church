@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Role, UserStatus } from '@wcc/db';
 import { AllowPending2fa, CurrentUser, Meta, ReqMeta } from '../common/decorators';
@@ -10,6 +10,8 @@ class ListUsersQuery {
   @IsOptional() @IsEnum(Role) role?: Role;
   @IsOptional() @IsEnum(UserStatus) status?: UserStatus;
   @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @IsString() @MaxLength(200) cursor?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
 }
 
 class UpdateUserDto {

@@ -100,6 +100,7 @@ export class JwtAuthGuard implements CanActivate {
       rolePermissions: new Set(
         (await this.prisma.rolePermission.findMany({ where: { role: user.role }, select: { permission: true } })).map((r) => r.permission),
       ),
+      serviceRecorder: await isServiceRecorder(this.prisma, user.id),
     };
 
     // Admins must enable 2FA before using anything but their account page (§7.1).
@@ -134,4 +135,12 @@ export class RolesGuard implements CanActivate {
     if (!user || !roles.includes(user.role)) throw forbidden();
     return true;
   }
+}
+
+/** True if the user is the pastor or a shepherd of an active bacenta that records church services. */
+export async function isServiceRecorder(prisma: PrismaService, userId: string): Promise<boolean> {
+  const n = await prisma.churchGroup.count({
+    where: { type: 'BACENTA', recordsServices: true, isActive: true, OR: [{ pastorId: userId }, { shepherds: { some: { userId } } }] },
+  });
+  return n > 0;
 }

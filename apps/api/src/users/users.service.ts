@@ -1,3 +1,4 @@
+import { cursorArgs, pageOf, pageSize } from '../common/pagination';
 import { Injectable } from '@nestjs/common';
 import { Prisma, Role, UserStatus } from '@wcc/db';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,18 +34,20 @@ export class UsersService {
     private readonly me: MeService,
   ) {}
 
-  async list(user: AuthUser, q: { role?: Role; status?: UserStatus; q?: string }) {
+  /** 20 at a time, active first then by name. */
+  async list(user: AuthUser, q: { role?: Role; status?: UserStatus; q?: string; cursor?: string; limit?: number }) {
     if (!this.policy.canListUsers(user)) throw forbidden();
-    return this.prisma.user.findMany({
-      where: {
-        role: q.role,
-        status: q.status,
-        OR: q.q ? [{ email: { contains: q.q, mode: 'insensitive' } }, { fullName: { contains: q.q, mode: 'insensitive' } }] : undefined,
-      },
-      orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
-      select: PUBLIC_FIELDS,
-      take: 500,
-    });
+    const take = pageSize(q.limit);
+    const where = {
+      role: q.role,
+      status: q.status,
+      OR: q.q ? [{ email: { contains: q.q, mode: 'insensitive' as const } }, { fullName: { contains: q.q, mode: 'insensitive' as const } }] : undefined,
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.user.findMany({ where, orderBy: [{ status: 'asc' }, { fullName: 'asc' }, { id: 'asc' }], select: PUBLIC_FIELDS, ...cursorArgs(q.cursor, take) }),
+      this.prisma.user.count({ where }),
+    ]);
+    return { ...pageOf(rows, take), total };
   }
 
   async get(user: AuthUser, id: string) {

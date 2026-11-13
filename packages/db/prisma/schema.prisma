@@ -439,26 +439,28 @@ enum GuestIntent {
 /// Constituency (led by a head pastor) → basontas inside it; bacentas are church-wide
 /// ministries (media, choir, ushers…). Each is led by a pastor (an app user).
 model ChurchGroup {
-  id           String        @id @default(uuid()) @db.Uuid
-  type         GroupType
-  name         String        @db.VarChar(80)
-  description  String?       @db.VarChar(500)
-  meetingDay   String?       @db.VarChar(40)
-  meetingPlace String?       @db.VarChar(160)
-  pastorId     String?       @db.Uuid
-  pastor       User?         @relation("GroupPastor", fields: [pastorId], references: [id], onDelete: SetNull)
-  createdById  String?       @db.Uuid
-  createdBy    User?         @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  id              String        @id @default(uuid()) @db.Uuid
+  type            GroupType
+  name            String        @db.VarChar(80)
+  description     String?       @db.VarChar(500)
+  meetingDay      String?       @db.VarChar(40)
+  meetingPlace    String?       @db.VarChar(160)
+  pastorId        String?       @db.Uuid
+  pastor          User?         @relation("GroupPastor", fields: [pastorId], references: [id], onDelete: SetNull)
+  createdById     String?       @db.Uuid
+  createdBy       User?         @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   /// A basonta's constituency.
-  parentId     String?       @db.Uuid
-  parent       ChurchGroup?  @relation("GroupParent", fields: [parentId], references: [id], onDelete: SetNull)
-  children     ChurchGroup[] @relation("GroupParent")
+  parentId        String?       @db.Uuid
+  parent          ChurchGroup?  @relation("GroupParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children        ChurchGroup[] @relation("GroupParent")
   /// A bacenta\'s overall team lead (a member).
-  leadMemberId String?       @db.Uuid
-  leadMember   Member?       @relation("GroupLead", fields: [leadMemberId], references: [id], onDelete: SetNull)
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  leadMemberId    String?       @db.Uuid
+  leadMember      Member?       @relation("GroupLead", fields: [leadMemberId], references: [id], onDelete: SetNull)
+  /// Bacentas only: its pastor and shepherds record church-service head-counts (e.g. Ushers).
+  recordsServices Boolean       @default(false)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   members        Member[]            @relation("MemberConstituency")
   basontaMembers Member[]            @relation("MemberBasonta")
@@ -558,6 +560,9 @@ model AttendanceSession {
   title           String?        @db.VarChar(120)
   visitorCount    Int            @default(0)
   firstTimerCount Int            @default(0)
+  /// Church services: total head-count (members + visitors + new converts); null for group meetings.
+  headcount       Int?
+  newConvertCount Int            @default(0)
   notes           String?        @db.VarChar(1000)
   recordedById    String?        @db.Uuid
   recordedBy      User?          @relation("AttendanceRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)

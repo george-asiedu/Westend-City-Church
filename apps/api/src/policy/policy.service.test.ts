@@ -157,3 +157,11 @@ describe('group hierarchy', () => {
     expect(p.canManageGroup(pa, { ...basonta, parentPastorId: 'y' })).toBe(false);
   });
 });
+
+describe('church-service head-counts', () => {
+  it('Super Admin and ushers (service-recording bacenta leaders) only', () => {
+    expect(ROLES.map((r) => p.canRecordSunday(user(r)))).toEqual([true, false, false, false]);
+    expect(p.canRecordSunday({ ...user('SHEPHERD'), serviceRecorder: true })).toBe(true);
+    expect(p.canRecordSunday({ ...user('PASTOR'), serviceRecorder: true })).toBe(true);
+  });
+});

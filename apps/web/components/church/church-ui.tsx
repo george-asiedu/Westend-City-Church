@@ -119,7 +119,7 @@ export function GroupFormDialog({
   const qc = useQueryClient();
   const { types, ledConstituencies, admin } = useCreatableTypes();
   const pastors = usePastors(open && admin);
-  const [f, setF] = useState({ type: defaultType as GType, name: '', description: '', meetingDay: '', meetingPlace: '', pastorId: '', parentId: '' });
+  const [f, setF] = useState({ type: defaultType as GType, name: '', description: '', meetingDay: '', meetingPlace: '', pastorId: '', parentId: '', recordsServices: false });
   useEffect(() => {
     if (!open) return;
     const type = group?.type ?? (types.includes(defaultType) ? defaultType : (types[0] ?? defaultType));
@@ -131,6 +131,7 @@ export function GroupFormDialog({
       meetingPlace: group?.meetingPlace ?? '',
       pastorId: group?.pastor?.id ?? '',
       parentId: group?.parent?.id ?? defaultParentId ?? ledConstituencies[0]?.id ?? '',
+      recordsServices: group?.recordsServices ?? false,
     });
   }, [open, group, defaultType]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF((s) => ({ ...s, [k]: e.target.value }));
@@ -144,6 +145,8 @@ export function GroupFormDialog({
         ...(admin ? { pastorId: f.pastorId || null } : {}),
         ...(f.type === 'BASONTA' && f.parentId ? { parentId: f.parentId } : {}),
       };
+      // Who records church services is a Super Admin choice, set when editing a bacenta.
+      if (group && admin && group.type === 'BACENTA') Object.assign(body, { recordsServices: f.recordsServices });
       return group ? api<GroupDto>(`/groups/${group.id}`, { method: 'PATCH', body }) : api<GroupDto>('/groups', { method: 'POST', body: { ...body, type: f.type } });
     },
     onSuccess: (g) => {
@@ -235,6 +238,16 @@ export function GroupFormDialog({
         <Field label="Description" htmlFor="g-desc">
           <Textarea id="g-desc" maxLength={500} value={f.description} onChange={set('description')} className="min-h-16" />
         </Field>
+        {group?.type === 'BACENTA' && admin && (
+          <div className="rounded-lg border border-border p-3">
+            <Checkbox
+              label={<span className="font-medium">This bacenta records church services</span>}
+              checked={f.recordsServices}
+              onChange={(e) => setF((s) => ({ ...s, recordsServices: e.target.checked }))}
+            />
+            <p className="mt-1 pl-6 text-xs text-muted">Its pastor and shepherds can enter the head-count for Sunday 1st and 2nd service, all-nights and camps. Usually the Ushers.</p>
+          </div>
+        )}
         <button type="submit" hidden />
       </form>
     </Dialog>

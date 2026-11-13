@@ -56,7 +56,7 @@ export async function dayRollup(prisma: PrismaClient, date: string): Promise<Day
       GROUP BY 1`,
     prisma.attendanceSession.findMany({
       where: { kind: 'CHURCH_SERVICE', date: d },
-      select: { id: true, serviceType: true, title: true, visitorCount: true, _count: { select: { records: true } } },
+      select: { id: true, serviceType: true, title: true, visitorCount: true, newConvertCount: true, headcount: true, _count: { select: { records: true } } },
       orderBy: { createdAt: 'asc' },
     }),
   ]);
@@ -92,7 +92,8 @@ export async function dayRollup(prisma: PrismaClient, date: string): Promise<Day
     date,
     total: constituencies.reduce((a, c) => a + (c.present ?? 0), 0),
     constituencies,
-    services: services.map((s) => ({ id: s.id, serviceType: s.serviceType, title: s.title, present: s._count.records, visitors: s.visitorCount })),
+    // Church services are head-counts (older ones fall back to members ticked + visitors).
+    services: services.map((s) => ({ id: s.id, serviceType: s.serviceType, title: s.title, present: s.headcount ?? s._count.records + s.visitorCount, visitors: s.visitorCount })),
     bacentas: groups.filter((g) => g.type === 'BACENTA').map((b) => ({ id: b.id, name: b.name, pastorId: b.pastorId, present: byGroup.has(b.id) ? byGroup.get(b.id)! : null })),
   };
 }

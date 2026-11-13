@@ -25,12 +25,7 @@ export const useGroups = (type?: 'CONSTITUENCY' | 'BASONTA' | 'BACENTA') =>
 
 export const usePastors = (enabled = true) => useQuery({ queryKey: mk.pastors, queryFn: () => api<PastorDto[]>('/groups/pastors'), enabled, staleTime: 60_000 });
 
-export interface MemberPage {
-  items: MemberDto[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
+export type MemberPage = import('@wcc/shared').Page<MemberDto> & { total: number };
 export interface MemberDetail extends MemberDto {
   broughtBy: { id: string; fullName: string } | null;
   history: Array<{
@@ -114,4 +109,33 @@ export function memberDefaultsFor(g: { id: string; type: 'CONSTITUENCY' | 'BASON
 /** "Media (Mixing, Live streaming)" */
 export function bacentaLabel(b: { name: string; roles: Array<{ name: string }> }): string {
   return b.roles.length ? `${b.name} (${b.roles.map((r) => r.name).join(', ')})` : b.name;
+}
+
+// ---------------------------------------------------------------- cursor pagination
+import { useInfiniteQuery } from '@tanstack/react-query';
+import type { Page } from '@wcc/shared';
+
+/** Lists load 20 at a time; `more()` fetches the next page. */
+export function useCursorList<T>(key: readonly unknown[], path: string, query: Record<string, string | number | boolean | undefined | null> = {}, enabled = true) {
+  const q = useInfiniteQuery({
+    queryKey: [...key, 'pages'],
+    queryFn: ({ pageParam }) => api<Page<T> & Record<string, unknown>>(path, { query: { ...query, cursor: pageParam, limit: 20 } }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled,
+  });
+  const items = q.data?.pages.flatMap((p) => p.items) ?? [];
+  return { ...q, items, first: q.data?.pages[0], total: q.data?.pages[0]?.total, more: () => void q.fetchNextPage() };
+}
+
+/** Fetches every page (for CSV exports), 200 at a time. */
+export async function fetchAll<T>(path: string, query: Record<string, string | number | boolean | undefined | null> = {}): Promise<T[]> {
+  const out: T[] = [];
+  let cursor: string | undefined;
+  do {
+    const p = await api<Page<T>>(path, { query: { ...query, cursor, limit: 200 } });
+    out.push(...p.items);
+    cursor = p.nextCursor ?? undefined;
+  } while (cursor && out.length < 20000);
+  return out;
 }

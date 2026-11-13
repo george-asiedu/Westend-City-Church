@@ -136,7 +136,13 @@ async function create(): Promise<void> {
   ];
   const bacentas = [];
   for (const [name, p, teams] of bacentaPlan) {
-    const g = await mkGroup('BACENTA', name, pastors[p]!.id, { meetingDay: pick(['Thursdays 6pm', 'Fridays 6:30pm', 'Saturdays 10am']), meetingPlace: 'Main auditorium' });
+    const g = await mkGroup('BACENTA', name, pastors[p]!.id, {
+      meetingDay: pick(['Thursdays 6pm', 'Fridays 6:30pm', 'Saturdays 10am']),
+      meetingPlace: 'Main auditorium',
+      // The Ushers record the Sunday head-counts.
+      recordsServices: name === 'Ushers',
+      ...(name === 'Ushers' ? { shepherds: { create: { userId: shepherds[2]!.id } } } : {}),
+    });
     const roles = [];
     for (const [i, t] of teams.entries()) roles.push(await prisma.bacentaRole.create({ data: { groupId: g.id, name: t, sortOrder: i } }));
     bacentas.push({ g, roles });
@@ -217,6 +223,17 @@ async function create(): Promise<void> {
     return s;
   };
 
+  /** Church services: the ushers' head-count (total, visitors, new converts) — no member ticks. */
+  const service = async (serviceType: string, title: string | null, date: Date, total: number, by: string) => {
+    const visitors = between(Math.floor(total * 0.05), Math.floor(total * 0.12));
+    const converts = between(0, Math.max(1, Math.floor(total * 0.03)));
+    await prisma.attendanceSession.create({
+      data: { kind: 'CHURCH_SERVICE', serviceType, title, date: day(date), headcount: total, visitorCount: visitors, newConvertCount: converts, recordedById: by, createdAt: date, updatedAt: date },
+    });
+    sessions++;
+  };
+  const usher = shepherds[2]!.id;
+
   for (let w = WEEKS - 1; w >= 0; w--) {
     const sun = addDays(sunday0, -7 * w);
     const sat = addDays(sun, -1);
@@ -229,9 +246,9 @@ async function create(): Promise<void> {
       const g = await prisma.churchGroup.findUniqueOrThrow({ where: { id: b.id }, select: { pastorId: true } });
       await record({ kind: 'GROUP_MEETING', groupId: b.id, serviceType: 'Meeting', date: sat, recordedById: g.pastorId ?? pastors[0]!.id }, roster, trend + 0.1, true);
     }
-    // Sunday services (two most weeks).
-    await record({ kind: 'CHURCH_SERVICE', serviceType: 'Sunday service', title: '1st service', date: sun, recordedById: pastors[0]!.id }, active, trend * 0.55, true);
-    if (w % 3 !== 2) await record({ kind: 'CHURCH_SERVICE', serviceType: 'Sunday service', title: '2nd service', date: sun, recordedById: pastors[1]!.id }, active, trend * 0.35, true);
+    // Sunday 1st and 2nd service head-counts (recorded by the ushers).
+    await service('Sunday service', '1st service', sun, Math.round(140 * trend) + between(-8, 8), usher);
+    await service('Sunday service', '2nd service', sun, Math.round(90 * trend) + between(-6, 6), usher);
     // Bacenta rehearsals.
     for (const { g } of bacentas) {
       if (chance(0.3)) continue;
@@ -239,10 +256,10 @@ async function create(): Promise<void> {
       await record({ kind: 'GROUP_MEETING', groupId: g.id, serviceType: pick(['Rehearsal', 'Meeting']), date: addDays(sun, -2), recordedById: g.pastorId! }, active.filter((m) => inIt.has(m.id)), 0.75, false);
     }
     // Specials.
-    if (w === 5) await record({ kind: 'CHURCH_SERVICE', serviceType: 'All-night service', date: addDays(sun, -2), recordedById: pastors[0]!.id }, active, 0.6, true);
+    if (w === 5) await service('All-night service', null, addDays(sun, -2), between(110, 150), usher);
     if (w === 3) {
-      await record({ kind: 'CHURCH_SERVICE', serviceType: 'Camp', title: 'Day 1', date: addDays(sun, -2), recordedById: pastors[2]!.id }, active, 0.45, false);
-      await record({ kind: 'CHURCH_SERVICE', serviceType: 'Camp', title: 'Day 2', date: addDays(sun, -1), recordedById: pastors[2]!.id }, active, 0.5, false);
+      await service('Camp', 'Day 1', addDays(sun, -2), between(70, 90), usher);
+      await service('Camp', 'Day 2', addDays(sun, -1), between(80, 100), usher);
     }
   }
 
@@ -259,12 +276,13 @@ async function create(): Promise<void> {
   console.log(`Demo data added:
   ${constituencies.length} constituencies, ${basontas.length} basontas, ${bacentas.length} bacentas (${bacentas.reduce((a, b) => a + b.roles.length, 0)} teams)
   ${N + 3} members, ${pastors.length} pastors, ${shepherds.length} shepherds
-  ${sessions} attendance records over ${WEEKS} weekends (Sundays ${iso(addDays(sunday0, -7 * (WEEKS - 1)))} … ${iso(sunday0)}), ${guests} people brought
+  ${sessions} attendance records over ${WEEKS} weekends (services are head-counts; members are recorded in basontas) (Sundays ${iso(addDays(sunday0, -7 * (WEEKS - 1)))} … ${iso(sunday0)}), ${guests} people brought
   ${admin ? `Your Super Admin (${admin.email}) sees everything.` : ''}
   Demo logins (password ${PASSWORD}):
     head pastor   ${pastors[0]!.email}
     pastor        ${pastors[5]!.email}
     shepherd      ${shepherds[0]!.email}
+    usher         ${shepherds[2]!.email}  (records the Sunday head-counts)
   (Pastors and shepherds don't need 2FA, so they can sign in straight away.)`);
 }
 

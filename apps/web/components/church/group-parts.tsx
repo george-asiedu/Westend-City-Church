@@ -10,7 +10,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/form';
 import { Card } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
-import { mk, type MemberPage } from '@/lib/membership';
+import { fetchAll, mk, type MemberPage } from '@/lib/membership';
 import { cn } from '@/lib/utils';
 
 const useGroupUpdate = (id: string) => {
@@ -32,7 +32,10 @@ function suggestionsFor(name: string, existing: string[]): string[] {
  * A bacenta's teams (mixing, projection, live streaming…), each with an optional team lead,
  * plus the bacenta's overall team lead.
  */
-export function TeamsCard({ g, members }: { g: GroupDto; members: MemberDto[] }) {
+export function TeamsCard({ g }: { g: GroupDto }) {
+  // Leads are picked from everyone in the bacenta (not just the first page).
+  const all = useQuery({ queryKey: mk.members({ bacentaId: g.id, all: true }), queryFn: () => fetchAll<MemberDto>('/members', { bacentaId: g.id }) });
+  const members = all.data ?? [];
   const update = useGroupUpdate(g.id);
   const [name, setName] = useState('');
   const [editing, setEditing] = useState<string | null>(null);

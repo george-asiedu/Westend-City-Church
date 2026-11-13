@@ -13,7 +13,7 @@ export interface MediaLike {
   deletedById?: string | null;
 }
 
-type Principal = Pick<AuthUser, 'id' | 'role' | 'grants'> & Partial<Pick<AuthUser, 'rolePermissions'>>;
+type Principal = Pick<AuthUser, 'id' | 'role' | 'grants'> & Partial<Pick<AuthUser, 'rolePermissions' | 'serviceRecorder'>>;
 
 const ADMINS: Role[] = ['SUPER_ADMIN'];
 /** Upload to folders they're granted; manage what they upload. */
@@ -198,9 +198,12 @@ export class PolicyService {
     return this.isMembershipAdmin(u);
   }
 
-  /** Church-wide services (Sunday, all-night, camps…). */
+  /**
+   * Church-wide service head-counts (Sunday 1st/2nd service, all-nights, camps…): Super Admins
+   * and the leaders of a bacenta marked as recording services (the Ushers).
+   */
   canRecordSunday(u: Principal): boolean {
-    return this.isMembershipAdmin(u) || u.role === 'PASTOR';
+    return this.isMembershipAdmin(u) || !!u.serviceRecorder;
   }
 
   /** Leaders edit members of groups they manage, or members they added. */

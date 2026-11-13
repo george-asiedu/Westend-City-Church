@@ -19,6 +19,8 @@ class CreateShareDto {
 }
 class ListSharesDto {
   @IsOptional() @IsUUID() eventId?: string;
+  @IsOptional() @IsString() @MaxLength(200) cursor?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) limit?: number;
 }
 class UnlockDto {
   @IsString() @MaxLength(200) password!: string;
@@ -39,7 +41,7 @@ export class SharesController {
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() q: ListSharesDto) {
-    return this.shares.list(user, q.eventId);
+    return this.shares.list(user, q.eventId, q.cursor, q.limit);
   }
 
   @Delete(':id')
