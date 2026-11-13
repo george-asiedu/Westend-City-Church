@@ -15,6 +15,7 @@
     "db:migrate": "pnpm --filter @wcc/db migrate:dev",
     "db:deploy": "pnpm --filter @wcc/db migrate:deploy",
     "db:seed": "pnpm --filter @wcc/db seed",
+    "db:demo": "pnpm --filter @wcc/db demo --",
     "format": "prettier --write .",
     "dev:services": "docker compose -f infra/compose/docker-compose.dev.yml up -d"
   },

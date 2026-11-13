@@ -11,6 +11,7 @@
     "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
     "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
+    "demo": "dotenv -e ../../.env -- tsx prisma/demo-church.ts",
     "seed:prod": "node dist/prisma/seed.js",
     "studio": "dotenv -e ../../.env -- prisma studio"
   },
