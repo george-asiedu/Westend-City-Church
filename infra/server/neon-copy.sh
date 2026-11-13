@@ -63,7 +63,7 @@ psql_local() { sudo -u postgres "${BIN}/psql" -p "${WCC_DB_PORT:-5432}" -d "${DB
 LOCAL_USERS="$(psql_local 'SELECT count(*) FROM "User"' 2>/dev/null || echo 0)"
 NEON_USERS="$("${BIN}/psql" "${NEON}" -qAtc 'SELECT count(*) FROM "User"' 2>/dev/null || echo 0)"
 if [ "${LOCAL_USERS:-0}" -eq 0 ]; then
-  log "REFUSING: this server's database has no users yet (run import-from-neon.sh first). Neon left as it is."
+  log "REFUSING: this server's database has no users yet (create the first user, or run import-from-neon.sh). Neon left as it is."
   exit 0
 fi
 if [ "${NEON_USERS:-0}" -gt "${LOCAL_USERS}" ]; then
@@ -74,7 +74,12 @@ fi
 log "loading $(basename "${DUMP}") into Neon (PostgreSQL ${NEON_MAJOR})"
 LIST="$(mktemp)"
 trap 'rc=$?; rm -f "${LIST}"; [ $rc -ne 0 ] && log "stopped on an error (exit $rc); Neon left as it is"; exit 0' EXIT
-# Leave Neon's own schema and extensions alone (they already exist there and Neon manages them).
+# Leave Neon's own schema and extensions alone (Neon manages them), but make sure every
+# extension the dump uses (citext, pg_trgm…) is switched on there first.
+for ext in $("${BIN}/pg_restore" -l "${DUMP}" | awk '/ EXTENSION - /{print $NF}' | sort -u); do
+  case "${ext}" in plpgsql) continue ;; esac
+  "${BIN}/psql" "${NEON}" -qAtc "CREATE EXTENSION IF NOT EXISTS \"${ext}\" WITH SCHEMA public" >/dev/null
+done
 "${BIN}/pg_restore" -l "${DUMP}" | grep -vE ' (EXTENSION|SCHEMA) - | COMMENT - EXTENSION ' > "${LIST}"
 if ! "${BIN}/pg_restore" --clean --if-exists --no-owner --no-privileges --single-transaction --exit-on-error -L "${LIST}" -d "${NEON}" "${DUMP}"; then
   log "FAILED: Neon keeps its previous copy. The local backup ${DUMP} is fine."
