@@ -8,7 +8,7 @@ import { GROUP_TYPE_LABELS, type GuestDto } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form';
 import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
-import { LoadMore } from '@/components/ui/load-more';
+import { Pager } from '@/components/ui/pager';
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/table';
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
 import { ColumnTrend, Doughnut, RankedBars } from '@/components/church/charts';
@@ -323,7 +323,7 @@ function PendingGuests() {
           </li>
         ))}
       </ul>
-      <LoadMore hasMore={!!list.hasNextPage} loading={list.isFetchingNextPage} onClick={list.more} shown={list.items.length} total={list.total} />
+      <Pager list={list} />
       <MemberFormDialog
         open={!!guest}
         onOpenChange={(o) => !o && setGuest(null)}
@@ -357,7 +357,7 @@ function RecentSessions() {
               </li>
             ))}
           </ul>
-          <LoadMore hasMore={!!list.hasNextPage} loading={list.isFetchingNextPage} onClick={list.more} shown={list.items.length} />
+          <Pager list={list} />
         </>
       ) : (
         <p className="text-sm text-muted">Nothing recorded yet.</p>

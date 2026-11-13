@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form';
 import { Card, PageHeader, PageLoader } from '@/components/ui/misc';
 import { api } from '@/lib/api';
 import { qk } from '@/lib/queries';
+import { useCursorList } from '@/lib/membership';
+import { Pager } from '@/components/ui/pager';
 import { formatDateTime } from '@/lib/utils';
 
 interface AuditRow {
@@ -63,12 +64,7 @@ export default function AuditPage() {
   const [entityType, setEntityType] = useState('');
   const [from, setFrom] = useState('');
   const filters = { action: action || undefined, entityType: entityType || undefined, from: from || undefined };
-  const audit = useInfiniteQuery({
-    queryKey: qk.audit(filters),
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => api<{ items: AuditRow[]; nextCursor: string | null }>('/audit', { query: { ...filters, cursor: pageParam, limit: 100 } }),
-    getNextPageParam: (p) => p.nextCursor ?? undefined,
-  });
+  const audit = useCursorList<AuditRow>(qk.audit(filters), '/audit', filters);
   return (
     <>
       <PageHeader title="Audit log" subtitle="Every sign-in, upload, edit, download and deletion." />
@@ -86,7 +82,7 @@ export default function AuditPage() {
         <PageLoader />
       ) : (
         <Card className="divide-y divide-border text-sm">
-          {audit.data?.pages.flatMap((p) => p.items).map((r) => (
+          {audit.items.map((r) => (
             <div key={r.id} className="flex flex-col gap-0.5 p-3 sm:flex-row sm:items-center sm:gap-4">
               <span className="w-40 shrink-0 text-xs text-muted">{formatDateTime(r.createdAt)}</span>
               <span className="flex-1">
@@ -97,13 +93,7 @@ export default function AuditPage() {
           ))}
         </Card>
       )}
-      {audit.hasNextPage && (
-        <div className="mt-4 flex justify-center">
-          <Button variant="outline" loading={audit.isFetchingNextPage} onClick={() => audit.fetchNextPage()}>
-            Load more
-          </Button>
-        </div>
-      )}
+      <Pager list={audit} />
     </>
   );
 }

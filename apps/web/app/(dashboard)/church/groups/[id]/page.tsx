@@ -17,7 +17,7 @@ import { AddExistingDialog, BasontasCard, MemberTeamsDialog, TeamsCard } from '@
 import { api, errorMessage } from '@/lib/api';
 import { useMe } from '@/lib/queries';
 import { bacentaLabel, downloadCsv, fetchAll, formatDay, memberDefaultsFor, mk, sessionName, useCursorList, useGroups, useShepherdCandidates, type SessionRow } from '@/lib/membership';
-import { LoadMore } from '@/components/ui/load-more';
+import { Pager } from '@/components/ui/pager';
 import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -267,7 +267,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     </li>
                   ))}
                 </ul>
-                <LoadMore hasMore={!!sessions.hasNextPage} loading={sessions.isFetchingNextPage} onClick={sessions.more} shown={sessions.items.length} />
+                <Pager list={sessions} />
                 </>
               ) : (
                 <p className="text-sm text-muted">No meetings recorded yet.</p>
@@ -424,7 +424,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                 ))}
               </ul>
             ) : null}
-            {!members.isLoading && list.length > 0 && <LoadMore hasMore={!!members.hasNextPage} loading={members.isFetchingNextPage} onClick={members.more} shown={list.length} total={members.total} />}
+            {!members.isLoading && list.length > 0 && <Pager list={members} />}
             {!members.isLoading && !list.length && (
               <p className="py-6 text-center text-sm text-muted">{term || leadersOnly || team ? 'No members match.' : 'No members yet.'}</p>
             )}

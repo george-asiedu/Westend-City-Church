@@ -9,7 +9,7 @@ import { api, errorMessage } from '@/lib/api';
 import { qk } from '@/lib/queries';
 import { formatDateTime } from '@/lib/utils';
 import { useCursorList } from '@/lib/membership';
-import { LoadMore } from '@/components/ui/load-more';
+import { Pager } from '@/components/ui/pager';
 
 interface ShareRow {
   id: string;
@@ -88,7 +88,7 @@ export default function SharesPage() {
               </div>
             </Card>
           ))}
-          <LoadMore hasMore={!!shares.hasNextPage} loading={shares.isFetchingNextPage} onClick={shares.more} shown={shares.items.length} />
+          <Pager list={shares} />
         </div>
       )}
     </>

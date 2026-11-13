@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Download, Phone, Plus, Users } from 'lucide-react';
 import type { MemberDto } from '@wcc/shared';
-import { LoadMore } from '@/components/ui/load-more';
+import { Pager } from '@/components/ui/pager';
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -188,7 +188,7 @@ export default function MembersPage() {
             ))}
           </ul>
           <div className="border-t border-border">
-            <LoadMore hasMore={!!members.hasNextPage} loading={members.isFetchingNextPage} onClick={members.more} shown={items.length} total={members.total} />
+            <Pager list={members} />
           </div>
         </Card>
       ) : (

@@ -14,7 +14,7 @@ import { api, errorMessage } from '@/lib/api';
 import { qk, useCategories, useMe } from '@/lib/queries';
 import { formatDateTime } from '@/lib/utils';
 import { useCursorList } from '@/lib/membership';
-import { LoadMore } from '@/components/ui/load-more';
+import { Pager } from '@/components/ui/pager';
 
 interface UserRow {
   id: string;
@@ -235,7 +235,7 @@ export default function UsersPage() {
               </div>
             </button>
           ))}
-          <LoadMore hasMore={!!users.hasNextPage} loading={users.isFetchingNextPage} onClick={users.more} shown={users.items.length} total={users.total} />
+          <Pager list={users} />
         </Card>
       )}
 

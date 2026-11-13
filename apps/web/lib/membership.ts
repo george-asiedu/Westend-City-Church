@@ -112,20 +112,50 @@ export function bacentaLabel(b: { name: string; roles: Array<{ name: string }> }
 }
 
 // ---------------------------------------------------------------- cursor pagination
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery as usePageQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import type { Page } from '@wcc/shared';
 
-/** Lists load 10 at a time; `more()` fetches the next page. */
+export const PAGE_SIZE = 10;
+
+/**
+ * One page of a cursor-paginated list at a time, with Previous/Next. Cursors of pages
+ * already visited are remembered so Previous is instant; changing the query (search,
+ * filters) goes back to page 1.
+ */
 export function useCursorList<T>(key: readonly unknown[], path: string, query: Record<string, string | number | boolean | undefined | null> = {}, enabled = true) {
-  const q = useInfiniteQuery({
-    queryKey: [...key, 'pages'],
-    queryFn: ({ pageParam }) => api<Page<T> & Record<string, unknown>>(path, { query: { ...query, cursor: pageParam, limit: 10 } }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  const sig = JSON.stringify([key, path, query]);
+  const [cursors, setCursors] = useState<Array<string | undefined>>([undefined]);
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    setCursors([undefined]);
+    setIndex(0);
+  }, [sig]);
+  const cursor = cursors[index];
+  const q = usePageQuery({
+    queryKey: [...key, 'page', cursor ?? 'first'],
+    queryFn: () => api<Page<T> & Record<string, unknown>>(path, { query: { ...query, cursor, limit: PAGE_SIZE } }),
     enabled,
+    placeholderData: keepPreviousData,
   });
-  const items = q.data?.pages.flatMap((p) => p.items) ?? [];
-  return { ...q, items, first: q.data?.pages[0], total: q.data?.pages[0]?.total, more: () => void q.fetchNextPage() };
+  const data = q.data;
+  const nextCursor = data?.nextCursor ?? null;
+  return {
+    ...q,
+    items: (data?.items ?? []) as T[],
+    first: data,
+    total: data?.total as number | undefined,
+    page: index + 1,
+    offset: index * PAGE_SIZE,
+    hasNext: !!nextCursor,
+    hasPrev: index > 0,
+    next: () => {
+      if (!nextCursor) return;
+      setCursors((c) => [...c.slice(0, index + 1), nextCursor]);
+      setIndex((i) => i + 1);
+    },
+    prev: () => setIndex((i) => Math.max(0, i - 1)),
+  };
 }
 
 /** Fetches every page (for CSV exports), 200 at a time. */

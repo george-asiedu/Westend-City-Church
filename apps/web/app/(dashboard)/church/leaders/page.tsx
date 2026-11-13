@@ -9,7 +9,7 @@ import { Badge, Card, EmptyState, PageHeader, PageLoader } from '@/components/ui
 import { ChurchTabs } from '@/components/church/church-ui';
 import { Stat } from '@/components/church/group-stats';
 import { errorMessage } from '@/lib/api';
-import { LoadMore } from '@/components/ui/load-more';
+import { Pager } from '@/components/ui/pager';
 import { useMe } from '@/lib/queries';
 import { formatDay, mk, useCursorList, type Leader } from '@/lib/membership';
 
@@ -119,7 +119,7 @@ export default function LeadersPage() {
             </Card>
           ))}
         </div>
-          <LoadMore hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} onClick={q.more} shown={list.length} total={q.total} />
+          <Pager list={q} />
         </>
       ) : (
         <EmptyState icon={<UserCog className="h-8 w-8" />} title={filtered ? 'No one matches' : 'No pastors or shepherds yet'}>
