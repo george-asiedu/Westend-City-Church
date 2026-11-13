@@ -11,6 +11,12 @@ export function normalizePhone(p: string | null | undefined): string | null {
   return d.length >= 9 ? d : null;
 }
 
+/** A Ghana mobile number as exactly 10 digits (0XXXXXXXXX), or null if it isn't one. */
+export function tenDigitPhone(p: string | null | undefined): string | null {
+  const n = normalizePhone(p);
+  return n && /^0\d{9}$/.test(n) ? n : null;
+}
+
 /**
  * Who should hear about something in the church: group leaders, and app users who are
  * members of the group (their account is linked to their member record, or matches its
@@ -30,7 +36,7 @@ export class AudienceService {
       this.prisma.user.findMany({ where: { status: 'ACTIVE' }, select: { id: true, email: true, phone: true } }),
     ]);
     for (const u of linked) out.set(u.memberId!, u.id);
-    const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
+    const byEmail = new Map(users.flatMap((u) => (u.email ? [[u.email.toLowerCase(), u.id] as const] : [])));
     const byPhone = new Map(users.flatMap((u) => (normalizePhone(u.phone) ? [[normalizePhone(u.phone)!, u.id] as const] : [])));
     for (const m of members) {
       if (out.has(m.id)) continue;

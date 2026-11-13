@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ArrayMaxSize, IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { Role } from '@wcc/db';
 import { CurrentUser, Meta, Public, ReqMeta, SkipCsrfToken } from '../common/decorators';
@@ -34,11 +34,15 @@ class JoinLinkDto {
 class JoinDto {
   @IsString() @MinLength(2) @MaxLength(120) fullName!: string;
   @IsOptional() @IsString() @MaxLength(40) title?: string;
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
-  @IsEmail()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() || null : value))
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsEmail({}, { message: 'Enter a valid email address, or leave it empty' })
   @MaxLength(254)
-  email!: string;
-  @IsOptional() @IsString() @MaxLength(30) phone?: string;
+  email?: string | null;
+  @Transform(({ value }) => (typeof value === 'string' ? value.replace(/[\s-]/g, '') : value))
+  @Matches(/^0\d{9}$/, { message: 'Enter your 10-digit phone number, e.g. 0241234567' })
+  phone!: string;
   @IsString() @MaxLength(200) password!: string;
   @IsOptional() @IsUUID() basontaId?: string | null;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('4', { each: true }) bacentaIds?: string[];

@@ -64,7 +64,7 @@ export async function buildExport(job: Job<ExportJobData>): Promise<void> {
       data: { status: 'READY', key, fileCount: media.length, sizeBytes: BigInt(archive.pointer()), completedAt: new Date() },
     });
     if (exp.requestedBy?.email)
-      await queues.mail.add('send', { to: exp.requestedBy.email, template: 'export-ready', data: { title: exp.title, link: `${env.WEB_ORIGIN}/downloads` } }, { attempts: 3, removeOnComplete: 500 });
+      if (exp.requestedBy.email) await queues.mail.add('send', { to: exp.requestedBy.email, template: 'export-ready', data: { title: exp.title, link: `${env.WEB_ORIGIN}/downloads` } }, { attempts: 3, removeOnComplete: 500 });
     log.info({ exportId: exp.id, files: media.length, bytes: archive.pointer() }, 'export ready');
   } catch (e) {
     await prisma.exportJob.update({ where: { id: exp.id }, data: { status: 'FAILED', error: (e as Error).message.slice(0, 1000) } });

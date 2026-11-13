@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Clock, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Checkbox, Field, Input, PasswordInput, Select } from '@/components/ui/form';
+import { Checkbox, EMAIL_PATTERN, Field, Input, PasswordInput, PhoneInput, Select } from '@/components/ui/form';
 import { Card, PageLoader } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
 
@@ -30,11 +30,11 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
       const r = await api<{ status: 'ACTIVE' | 'PENDING_APPROVAL' }>(path, {
         method: 'POST',
         anonymous: true,
-        body: { ...f, title: f.title || undefined, phone: f.phone || undefined, basontaId: f.basontaId || null },
+        body: { ...f, title: f.title || undefined, email: f.email.trim() || null, basontaId: f.basontaId || null },
       });
       // Members are in straight away: sign them in.
       if (r.status === 'ACTIVE') {
-        await api('/auth/login', { method: 'POST', anonymous: true, body: { email: f.email, password: f.password } });
+        await api('/auth/login', { method: 'POST', anonymous: true, body: { email: f.phone, password: f.password } });
         window.location.assign('/me/church');
       }
       return r;
@@ -59,14 +59,14 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         <Clock className="mx-auto h-10 w-10 text-brand" />
         <h1 className="text-lg font-semibold">Thanks, {f.fullName.split(' ')[0]}! Almost there.</h1>
         <p className="text-sm text-muted">
-          Your {d.roleLabel.toLowerCase()} account is created. A Super Admin will approve it shortly, and we’ll email {f.email} when you can sign in with the password you just chose.
+          Your {d.roleLabel.toLowerCase()} account is created. A Super Admin will approve it shortly, and you can then sign in with your phone number and the password you just chose{f.email ? ` (we’ll email ${f.email} too)` : ''}.
         </p>
       </Card>
     );
 
   return (
     <Card className="p-5">
-      <h1 className="mb-1 text-lg font-semibold">Join the WCC app</h1>
+      <h1 className="mb-1 text-lg font-semibold">Join The WCC App</h1>
       <p className="mb-4 text-sm text-muted">
         Create your account as a <b>{d.roleLabel}</b>
         {d.needsApproval ? '. A Super Admin approves it before you can sign in.' : '. You’ll be signed in straight away.'}
@@ -86,11 +86,11 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         <Field label="Full name" htmlFor="j-name">
           <Input id="j-name" required minLength={2} maxLength={120} autoComplete="name" value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} />
         </Field>
-        <Field label="Email" htmlFor="j-email">
-          <Input id="j-email" type="email" required maxLength={254} autoComplete="email" inputMode="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+        <Field label="Phone number" htmlFor="j-phone" hint="10 digits. You’ll sign in with it, and use it to check in at church.">
+          <PhoneInput id="j-phone" required value={f.phone} onValueChange={(phone) => setF({ ...f, phone })} />
         </Field>
-        <Field label="Phone (optional)" htmlFor="j-phone" hint="So your leaders can reach you, and for check-in at church">
-          <Input id="j-phone" type="tel" inputMode="tel" maxLength={30} autoComplete="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+        <Field label="Email (optional)" htmlFor="j-email" hint="Lets you reset your password if you forget it.">
+          <Input id="j-email" type="email" pattern={EMAIL_PATTERN} maxLength={254} autoComplete="email" inputMode="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         </Field>
         <Field label="Password" htmlFor="j-pw" hint="At least 8 characters. Avoid common words.">
           <PasswordInput id="j-pw" required minLength={8} maxLength={200} autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />

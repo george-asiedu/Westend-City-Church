@@ -144,9 +144,9 @@ export default function JoinLinksPage() {
         {showing && origin && (
           <QrCard
             url={`${origin}/join/${showing.code}`}
-            title={`Join the WCC app`}
+            title="Join The WCC App"
             subtitle={`For ${WHO[showing.role]}. Scan it and create your account in a minute.`}
-            steps={['Open your phone camera and point it here', 'Tap the link that appears', 'Fill in your details and choose a password']}
+            steps={['Open your phone camera and point it here', 'Tap the link that appears', 'Enter your details and choose a password']}
             filename={`wcc-join-${showing.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
           />
         )}

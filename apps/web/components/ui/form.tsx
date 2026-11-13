@@ -11,6 +11,36 @@ export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTML
   return <input ref={ref} className={cn(base, 'h-10', className)} {...p} />;
 });
 
+/** Email pattern for the browser's own check (needs a dot after the @). */
+export const EMAIL_PATTERN = '[^@\\s]+@[^@\\s]+\\.[^@\\s]+';
+
+/** A Ghana phone number: digits only, exactly 10 (0XXXXXXXXX). */
+export const PhoneInput = forwardRef<HTMLInputElement, Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange' | 'value'> & { value: string; onValueChange: (v: string) => void }>(
+  function PhoneInput({ className, value, onValueChange, ...p }, ref) {
+    return (
+      <input
+        ref={ref}
+        type="tel"
+        inputMode="numeric"
+        autoComplete="tel"
+        pattern="0[0-9]{9}"
+        minLength={10}
+        maxLength={10}
+        placeholder="0241234567"
+        title="10 digits, starting with 0, e.g. 0241234567"
+        className={cn(base, 'h-10 tabular-nums', className)}
+        value={value}
+        onChange={(e) => {
+          let d = e.target.value.replace(/\D/g, '');
+          if (d.startsWith('233')) d = `0${d.slice(3)}`;
+          onValueChange(d.slice(0, 10));
+        }}
+        {...p}
+      />
+    );
+  },
+);
+
 export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...p }, ref) {
   return <textarea ref={ref} className={cn(base, 'min-h-24 py-2', className)} {...p} />;
 });

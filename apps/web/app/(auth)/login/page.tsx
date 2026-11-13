@@ -67,8 +67,8 @@ function LoginForm() {
       <form onSubmit={submit} className="space-y-4">
         {!needTotp ? (
           <>
-            <Field label="Email" htmlFor="email">
-              <Input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Field label="Email or phone number" htmlFor="email">
+              <Input id="email" type="text" inputMode="email" autoCapitalize="none" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
             <Field label="Password" htmlFor="password">
               <PasswordInput id="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />

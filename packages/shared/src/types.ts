@@ -14,7 +14,7 @@ export interface CategoryGrant {
 
 export interface MeResponse {
   id: string;
-  email: string;
+  email: string | null;
   fullName: string;
   title: string | null;
   phone: string | null;
@@ -133,7 +133,7 @@ export interface PastorDto {
   fullName: string;
   title: string | null;
   phone: string | null;
-  email: string;
+  email: string | null;
 }
 
 export interface GroupDto {
@@ -298,7 +298,7 @@ export interface LeaderDto {
   fullName: string;
   title: string | null;
   phone: string | null;
-  email: string;
+  email: string | null;
   role: 'SUPER_ADMIN' | 'PASTOR' | 'SHEPHERD';
   status: string;
   createdAt: string;

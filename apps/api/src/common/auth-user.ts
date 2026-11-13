@@ -10,7 +10,7 @@ export interface Grant {
 export interface AuthUser {
   id: string;
   sid: string;
-  email: string;
+  email: string | null;
   fullName: string;
   role: Role;
   totpEnabled: boolean;

@@ -4,7 +4,11 @@ import { Transform } from 'class-transformer';
 const trimLower = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toLowerCase() : value);
 
 export class LoginDto {
-  @Transform(trimLower) @IsEmail() @MaxLength(254) email!: string;
+  /** Email address or phone number (members who joined with a QR code may have no email). */
+  @Transform(trimLower)
+  @Matches(/^([^@\s]+@[^@\s]+\.[^@\s]+|[+\d\s()-]{9,20})$/, { message: 'Enter your email address or 10-digit phone number' })
+  @MaxLength(254)
+  email!: string;
   @IsString() @MinLength(1) @MaxLength(200) password!: string;
   @IsOptional() @IsString() @MaxLength(20) totp?: string;
 }

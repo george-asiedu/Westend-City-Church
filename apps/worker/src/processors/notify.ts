@@ -112,7 +112,7 @@ async function birthdayPeople(date: string): Promise<BirthdayPerson[]> {
     prisma.user.findMany({ where: { status: 'ACTIVE' }, select: { id: true, email: true, phone: true, memberId: true } }),
   ]);
   const byMember = new Map(users.flatMap((u) => (u.memberId ? [[u.memberId, u.id] as const] : [])));
-  const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
+  const byEmail = new Map(users.flatMap((u) => (u.email ? [[u.email.toLowerCase(), u.id] as const] : [])));
   const byPhone = new Map(users.flatMap((u) => (normalizePhone(u.phone) ? [[normalizePhone(u.phone)!, u.id] as const] : [])));
   const userOf = (x: { id: string; email: string | null; phone: string | null }) => byMember.get(x.id) || (x.email && byEmail.get(x.email.toLowerCase())) || (normalizePhone(x.phone) && byPhone.get(normalizePhone(x.phone)!)) || null;
   const gById = new Map(groups.map((g) => [g.id, g]));
@@ -207,7 +207,7 @@ export async function monthlyReport(month?: string) {
     `Follow-ups: ${followUpsDone} completed, ${followUpsOpen} still open.`,
   ];
   const admins = await prisma.user.findMany({ where: { role: 'SUPER_ADMIN', status: 'ACTIVE' }, select: { id: true, email: true, fullName: true } });
-  for (const a of admins)
+  for (const a of admins.filter((x) => x.email))
     await queues.mail.add(
       'send',
       { to: a.email, template: 'monthly-report', data: { name: a.fullName.split(' ')[0] ?? '', month: label, lines: lines.join('\n'), link: `${env.WEB_ORIGIN}/church/attendance` } },

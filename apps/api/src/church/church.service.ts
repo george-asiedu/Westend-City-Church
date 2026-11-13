@@ -22,7 +22,7 @@ import { cursorArgs, fromDateOnly, pageOf, pageSize, toDateOnly } from '../commo
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 import { MembershipService } from '../membership/membership.service';
-import { AudienceService, normalizePhone } from './audience.service';
+import { AudienceService, normalizePhone, tenDigitPhone } from './audience.service';
 
 const pastorSelect = { id: true, fullName: true, title: true, phone: true, email: true } as const;
 const blank = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() ? v.trim() : null);
@@ -562,7 +562,8 @@ export class ChurchService {
   /** A visitor fills in their own card (QR code at the service). Lands in "New people". */
   async visitorCard(dto: { fullName: string; phone?: string | null; location?: string | null; howHeard?: string | null; prayerRequest?: string | null; wantsToJoin?: boolean; website?: string }) {
     if (dto.website) return { ok: true }; // honeypot: bots fill every field
-    const phone = normalizePhone(dto.phone);
+    const phone = tenDigitPhone(dto.phone);
+    if (dto.phone?.trim() && !phone) throw badRequest('PHONE', 'Enter a 10-digit phone number, e.g. 0241234567');
     // The same person submitting twice on one day counts once.
     if (phone) {
       const dup = await this.prisma.guest.findFirst({ where: { sessionId: null, phone, createdAt: { gte: new Date(Date.now() - 86_400_000) } }, select: { id: true } });
@@ -751,8 +752,8 @@ export class ChurchService {
   async updateMyMember(user: AuthUser, dto: { phone?: string | null; location?: string | null; dateOfBirth?: string | null; email?: string | null }, meta: ReqMeta) {
     const memberId = await this.myMemberId(user);
     if (!memberId) throw badRequest('NOT_LINKED', 'Your account isn’t linked to a member record yet. Ask a pastor.');
-    const phone = dto.phone === undefined ? undefined : normalizePhone(dto.phone);
-    if (dto.phone && !phone) throw badRequest('PHONE', 'That phone number doesn’t look right');
+    const phone = dto.phone === undefined ? undefined : tenDigitPhone(dto.phone);
+    if (dto.phone && !phone) throw badRequest('PHONE', 'Enter a 10-digit phone number, e.g. 0241234567');
     if (phone) {
       const dup = await this.prisma.member.findFirst({ where: { phone, id: { not: memberId } }, select: { id: true } });
       if (dup) throw conflict('MEMBER_EXISTS', 'Another member already has that phone number');

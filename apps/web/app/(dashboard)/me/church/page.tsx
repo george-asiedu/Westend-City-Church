@@ -8,7 +8,7 @@ import { CalendarCheck, Cake, ClipboardCheck, Pencil, ShieldCheck, Users } from 
 import { GROUP_TYPE_LABELS, type MyChurchDto } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { Field, Input } from '@/components/ui/form';
+import { EMAIL_PATTERN, Field, Input, PhoneInput } from '@/components/ui/form';
 import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { PastorCard } from '@/components/church/church-ui';
 import { api, errorMessage } from '@/lib/api';
@@ -155,10 +155,10 @@ function DetailsDialog({ open, onOpenChange, d, onSaved }: { open: boolean; onOp
     >
       <div className="space-y-3">
         <Field label="Phone" htmlFor="my-phone">
-          <Input id="my-phone" type="tel" maxLength={30} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+          <PhoneInput id="my-phone" value={f.phone} onValueChange={(phone) => setF({ ...f, phone })} />
         </Field>
         <Field label="Email (on your member record)" htmlFor="my-email">
-          <Input id="my-email" type="email" maxLength={160} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+          <Input id="my-email" type="email" pattern={EMAIL_PATTERN} maxLength={160} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         </Field>
         <Field label="Where you stay" htmlFor="my-loc">
           <Input id="my-loc" maxLength={160} value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} />

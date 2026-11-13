@@ -42,7 +42,9 @@ export class QueueService implements OnModuleDestroy {
     });
   }
 
-  async mail(data: MailJob): Promise<void> {
+  /** Queues an email; skipped when the user has no email address (phone-only members). */
+  async mail(data: Omit<MailJob, 'to'> & { to: string | null }): Promise<void> {
+    if (!data.to) return;
     await this.queue(QUEUES.MAIL).add('send', data, {
       attempts: 5,
       backoff: { type: 'exponential', delay: 60_000 },

@@ -1,4 +1,4 @@
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { BadRequestException, Body, Controller, type PipeTransform, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
@@ -163,17 +163,20 @@ export class ChurchController {
   @Delete('attendance/sessions/:id/checkin') closeCheckin(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Meta() m: ReqMeta) { return this.checkin.close(u, id, m); }
 
   // self check-in: signed-in members
+  // No rate limits on check-in: the whole church checks in at once on Sunday, often from the
+  // same mobile-network address. The code only works on the day, while the ushers keep it open.
+  @SkipThrottle()
   @Get('checkin/:code') checkinInfo(@CurrentUser() u: AuthUser, @Param('code', codePipe) code: string) { return this.checkin.info(code, u); }
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @SkipThrottle()
   @Post('checkin/:code') checkIn(@CurrentUser() u: AuthUser, @Param('code', codePipe) code: string, @Body() d: CheckinDto) { return this.checkin.checkIn(code, u, d); }
 
   // self check-in: anyone at the QR code, by phone number
   @Public()
-  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  @SkipThrottle()
   @Get('public/checkin/:code') publicCheckinInfo(@Param('code', codePipe) code: string) { return this.checkin.info(code, null); }
   @Public()
   @SkipCsrfToken() // no session: Origin check only
-  @Throttle({ default: { limit: 60, ttl: 60_000 } }) // many phones share the church Wi-Fi address
+  @SkipThrottle()
   @Post('public/checkin/:code') publicCheckIn(@Param('code', codePipe) code: string, @Body() d: CheckinDto) { return this.checkin.checkIn(code, null, d); }
 
   // follow-ups

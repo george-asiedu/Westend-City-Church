@@ -64,10 +64,12 @@ enum ExportStatus {
 
 model User {
   id                String     @id @default(uuid()) @db.Uuid
-  email             String     @unique @db.Citext
+  /// Optional for members who joined with a QR code (they sign in with their phone).
+  email             String?    @unique @db.Citext
   fullName          String     @db.VarChar(120)
   title             String?    @db.VarChar(40)
-  phone             String?    @db.VarChar(30)
+  /// 10 digits (0XXXXXXXXX); also a sign-in name.
+  phone             String?    @unique @db.VarChar(30)
   role              Role       @default(VIEWER)
   status            UserStatus @default(INVITED)
   passwordHash      String?

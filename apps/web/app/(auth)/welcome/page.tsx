@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Checkbox, Field, Input, Select, Textarea } from '@/components/ui/form';
+import { Checkbox, Field, Input, PhoneInput, Select, Textarea } from '@/components/ui/form';
 import { Card } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
 
@@ -37,7 +37,7 @@ export default function WelcomePage() {
           <Input id="v-name" required minLength={2} maxLength={100} autoComplete="name" value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} />
         </Field>
         <Field label="Phone (WhatsApp)" htmlFor="v-phone">
-          <Input id="v-phone" type="tel" inputMode="tel" maxLength={30} autoComplete="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+          <PhoneInput id="v-phone" value={f.phone} onValueChange={(phone) => setF({ ...f, phone })} />
         </Field>
         <Field label="Where do you stay?" htmlFor="v-loc">
           <Input id="v-loc" maxLength={120} value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} />

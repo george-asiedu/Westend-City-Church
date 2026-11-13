@@ -11,7 +11,7 @@ export async function usersForMembers(memberIds: string[]): Promise<Map<string, 
     prisma.user.findMany({ where: { status: 'ACTIVE' }, select: { id: true, email: true, phone: true } }),
   ]);
   for (const u of linked) out.set(u.memberId!, u.id);
-  const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.id]));
+  const byEmail = new Map(users.flatMap((u) => (u.email ? [[u.email.toLowerCase(), u.id] as const] : [])));
   const byPhone = new Map(users.flatMap((u) => (normalizePhone(u.phone) ? [[normalizePhone(u.phone)!, u.id] as const] : [])));
   for (const m of members) {
     if (out.has(m.id)) continue;

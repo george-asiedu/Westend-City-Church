@@ -1,3 +1,4 @@
+import { normalizePhone } from '../church/audience.service';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
 import { ENV, Env } from '../config/env';
@@ -45,7 +46,8 @@ export class AuthService {
     if (!(await this.hit(`login:email:${sha256(dto.email)}`, LOCK_AFTER * 2, LOCK_MINUTES * 60)))
       throw new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', 'Too many attempts. Try again later.');
 
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const phone = dto.email.includes('@') ? null : normalizePhone(dto.email);
+    const user = phone ? await this.prisma.user.findUnique({ where: { phone } }) : await this.prisma.user.findUnique({ where: { email: dto.email } });
     const ok = await this.passwords.verify(user?.passwordHash, dto.password);
 
     if (!user) throw INVALID();
@@ -129,7 +131,7 @@ export class AuthService {
   async resetPassword(token: string, password: string, meta: ReqMeta): Promise<void> {
     const row = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash: sha256(token) }, include: { user: true } });
     if (!row || row.usedAt || row.expiresAt < new Date()) throw badRequest('TOKEN_INVALID', 'This link is invalid or has expired');
-    await this.passwords.assertStrong(password, [row.user.email, row.user.fullName]);
+    await this.passwords.assertStrong(password, [row.user.email ?? '', row.user.phone ?? '', row.user.fullName]);
     const hash = await this.passwords.hash(password);
     await this.prisma.$transaction([
       this.prisma.passwordResetToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
@@ -145,7 +147,7 @@ export class AuthService {
   async changePassword(user: AuthUser, current: string, next: string, meta: ReqMeta): Promise<void> {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     if (!(await this.passwords.verify(u.passwordHash, current))) throw badRequest('WRONG_PASSWORD', 'Current password is incorrect');
-    await this.passwords.assertStrong(next, [u.email, u.fullName]);
+    await this.passwords.assertStrong(next, [u.email ?? '', u.phone ?? '', u.fullName]);
     await this.prisma.user.update({ where: { id: u.id }, data: { passwordHash: await this.passwords.hash(next), passwordChangedAt: new Date() } });
     await this.sessions.revokeAllForUser(u.id, 'PASSWORD_CHANGE', user.sid);
     await this.audit.record({ actorId: u.id, action: 'PASSWORD_CHANGED', entityType: 'USER', entityId: u.id, meta });
@@ -155,7 +157,7 @@ export class AuthService {
   async requestEmailChange(user: AuthUser, newEmail: string, password: string, meta: ReqMeta): Promise<{ pendingEmail: string; expiresAt: Date }> {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     if (!(await this.passwords.verify(u.passwordHash, password))) throw badRequest('WRONG_PASSWORD', 'Password is incorrect');
-    if (newEmail === u.email.toLowerCase()) throw badRequest('SAME_EMAIL', 'That is already your email address');
+    if (newEmail === u.email?.toLowerCase()) throw badRequest('SAME_EMAIL', 'That is already your email address');
     if (!(await this.hit(`email-change:${u.id}`, 5, 3600))) throw new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', 'Too many attempts. Try again in an hour.');
     if (await this.prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } }))
       throw badRequest('EMAIL_TAKEN', 'That email address is already used by another account');
@@ -217,7 +219,7 @@ export class AuthService {
     if (u.totpEnabled) throw badRequest('TOTP_ALREADY_ENABLED', 'Two-factor authentication is already on');
     const { secret, encrypted } = this.totp.newSecret();
     await this.prisma.user.update({ where: { id: u.id }, data: { totpSecretEnc: encrypted } });
-    return { ...(await this.totp.qr(u.email, secret)), secret };
+    return { ...(await this.totp.qr(u.email ?? u.phone ?? u.fullName, secret)), secret };
   }
 
   async enable2fa(user: AuthUser, code: string, meta: ReqMeta): Promise<{ recoveryCodes: string[] }> {

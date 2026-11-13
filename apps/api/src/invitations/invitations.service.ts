@@ -11,7 +11,7 @@ import { randomToken, sha256 } from '../common/crypto';
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 import { ROLE_LABELS } from '@wcc/shared';
-import { normalizePhone } from '../church/audience.service';
+import { tenDigitPhone } from '../church/audience.service';
 
 const TTL_MS = 72 * 3600_000;
 
@@ -214,16 +214,17 @@ export class InvitationsService {
    */
   async join(
     code: string,
-    dto: { fullName: string; title?: string; email: string; phone?: string; password: string; basontaId?: string | null; bacentaIds?: string[] },
+    dto: { fullName: string; title?: string; email?: string | null; phone: string; password: string; basontaId?: string | null; bacentaIds?: string[] },
     meta: ReqMeta,
   ): Promise<{ status: 'ACTIVE' | 'PENDING_APPROVAL' }> {
     const l = await this.liveJoinLink(code);
-    const email = dto.email.trim().toLowerCase();
+    const email = dto.email?.trim().toLowerCase() || null;
     const fullName = dto.fullName.trim();
-    const phone = normalizePhone(dto.phone);
-    if (dto.phone?.trim() && !phone) throw badRequest('PHONE', 'That phone number doesn’t look right');
-    if (await this.prisma.user.findUnique({ where: { email }, select: { id: true } })) throw conflict('USER_EXISTS', 'There’s already an account with this email. Sign in instead.');
-    await this.passwords.assertStrong(dto.password, [email, fullName]);
+    const phone = tenDigitPhone(dto.phone);
+    if (!phone) throw badRequest('PHONE', 'Enter your 10-digit phone number, e.g. 0241234567');
+    if (await this.prisma.user.findUnique({ where: { phone }, select: { id: true } })) throw conflict('USER_EXISTS', 'There’s already an account with this phone number. Sign in instead.');
+    if (email && (await this.prisma.user.findUnique({ where: { email }, select: { id: true } }))) throw conflict('USER_EXISTS', 'There’s already an account with this email. Sign in instead.');
+    await this.passwords.assertStrong(dto.password, [email ?? '', phone, fullName]);
     const passwordHash = await this.passwords.hash(dto.password);
     const bacentaIds = [...new Set(dto.bacentaIds ?? [])];
     const groups = await this.prisma.churchGroup.findMany({ where: { id: { in: [...(dto.basontaId ? [dto.basontaId] : []), ...bacentaIds] }, isActive: true }, select: { id: true, type: true, parentId: true } });
@@ -237,7 +238,7 @@ export class InvitationsService {
       if (!used.count) throw badRequest('JOIN_LINK_INVALID', 'This QR code has been used up. Ask the church office for a new one.');
       // Their member record: one already in the directory with this email or phone (and no account), or a new one.
       const existing = await tx.member.findFirst({
-        where: { account: null, OR: [{ email: { equals: email, mode: 'insensitive' } }, ...(phone ? [{ phone }] : [])] },
+        where: { account: null, OR: [{ phone }, ...(email ? [{ email: { equals: email, mode: 'insensitive' as const } }] : [])] },
         select: { id: true, basontaId: true, email: true, phone: true },
       });
       const placement = basonta ? { basontaId: basonta.id, constituencyId: basonta.parentId } : {};
