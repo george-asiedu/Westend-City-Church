@@ -15,8 +15,9 @@ export interface MediaLike {
 
 type Principal = Pick<AuthUser, 'id' | 'role' | 'grants'> & Partial<Pick<AuthUser, 'rolePermissions'>>;
 
-const ADMINS: Role[] = ['SUPER_ADMIN', 'MEDIA_ADMIN'];
-const CONTRIBUTORS: Role[] = ['MEDIA_TEAM', 'PASTOR', 'SHEPHERD'];
+const ADMINS: Role[] = ['SUPER_ADMIN'];
+/** Upload to folders they're granted; manage what they upload. */
+const CONTRIBUTORS: Role[] = ['PASTOR', 'SHEPHERD'];
 
 /** A group as policy sees it: who leads it and who shepherds it. */
 export interface GroupRef {
@@ -117,17 +118,13 @@ export class PolicyService {
   }
 
   canInvite(u: Principal, role: Role): boolean {
-    if (u.role === 'SUPER_ADMIN') return true;
-    if (u.role === 'MEDIA_ADMIN') return !ADMINS.includes(role);
-    return false;
+    return u.role === 'SUPER_ADMIN';
   }
 
   /** Change role/status/grants of `target` (optionally to `newRole`). Nobody edits themselves here. */
   canManageUser(u: Principal, target: { id: string; role: Role }, newRole?: Role): boolean {
     if (target.id === u.id) return false;
-    if (u.role === 'SUPER_ADMIN') return true;
-    if (u.role === 'MEDIA_ADMIN') return !ADMINS.includes(target.role) && (!newRole || !ADMINS.includes(newRole));
-    return false;
+    return u.role === 'SUPER_ADMIN';
   }
 
   canListUsers(u: Principal): boolean {
@@ -232,13 +229,13 @@ export class PolicyService {
 
   /**
    * Share links send media outside the system.
-   * DECISION: admins, pastors (who send family photos), the event creator and
-   * category managers may share; VIEWER and other MEDIA_TEAM members may not.
+   * DECISION: admins, pastors (who send family photos), and shepherds for events they
+   * created or folders they manage may share; viewers may not.
    */
   canShareEvent(u: Principal, e: EventLike): boolean {
     if (!this.canViewEvent(u, e)) return false;
     if (this.isAdmin(u) || u.role === 'PASTOR') return true;
-    return u.role === 'MEDIA_TEAM' && (e.createdById === u.id || this.canManageCategoryContent(u, e.categoryId));
+    return u.role === 'SHEPHERD' && (e.createdById === u.id || this.canManageCategoryContent(u, e.categoryId));
   }
 
   canManageShareLink(u: Principal, link: { createdById: string }): boolean {

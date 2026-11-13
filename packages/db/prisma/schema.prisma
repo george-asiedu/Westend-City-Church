@@ -15,8 +15,6 @@ datasource db {
 
 enum Role {
   SUPER_ADMIN
-  MEDIA_ADMIN
-  MEDIA_TEAM
   PASTOR
   SHEPHERD
   VIEWER

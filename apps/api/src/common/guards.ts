@@ -103,7 +103,7 @@ export class JwtAuthGuard implements CanActivate {
     };
 
     // Admins must enable 2FA before using anything but their account page (§7.1).
-    const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'MEDIA_ADMIN';
+    const isAdmin = user.role === 'SUPER_ADMIN';
     if (this.env.REQUIRE_2FA_FOR_ADMINS && isAdmin && !user.totpEnabled) {
       const allowed = this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_2FA, [ctx.getHandler(), ctx.getClass()]);
       if (!allowed) throw new AppException(HttpStatus.FORBIDDEN, 'TOTP_SETUP_REQUIRED', 'Enable two-factor authentication first');

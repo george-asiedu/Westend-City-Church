@@ -6,7 +6,7 @@ import type { Grant } from '../common/auth-user';
 const p = new PolicyService();
 const CAT = 'cat-granted';
 const OTHER = 'cat-other';
-const ROLES: Role[] = ['SUPER_ADMIN', 'MEDIA_ADMIN', 'MEDIA_TEAM', 'PASTOR', 'VIEWER'];
+const ROLES: Role[] = ['SUPER_ADMIN', 'PASTOR', 'SHEPHERD', 'VIEWER'];
 
 function user(role: Role, grant: Partial<Grant> = {}, id = 'me') {
   const grants = new Map<string, Grant>();
@@ -20,26 +20,26 @@ const manage = { canUpload: true, canManage: true };
 
 describe('§6.1 matrix', () => {
   const cases: Array<[string, (r: Role) => boolean, boolean[]]> = [
-    ['view published', (r) => p.canViewEvent(user(r), { categoryId: CAT, createdById: 'x', status: 'PUBLISHED' }), [true, true, true, true, true]],
-    ['create event in granted cat', (r) => p.canCreateEvent(user(r, upload), CAT), [true, true, true, true, false]],
-    ['create event in other cat', (r) => p.canCreateEvent(user(r, upload), OTHER), [true, true, false, false, false]],
-    ['create event without grant', (r) => p.canCreateEvent(user(r), CAT), [true, true, false, false, false]],
-    ['edit own media', (r) => p.canEditMedia(user(r), { uploadedById: 'me', categoryId: CAT }), [true, true, true, true, false]],
-    ['edit others media w/o manage', (r) => p.canEditMedia(user(r, upload), { uploadedById: 'x', categoryId: CAT }), [true, true, false, false, false]],
-    ['edit others media with manage', (r) => p.canEditMedia(user(r, manage), { uploadedById: 'x', categoryId: CAT }), [true, true, true, true, false]],
-    ['edit own event', (r) => p.canEditEvent(user(r), { categoryId: CAT, createdById: 'me', status: 'PUBLISHED' }), [true, true, true, true, false]],
-    ['move with manage on one side only', (r) => p.canMoveMedia(user(r, manage), CAT, OTHER), [true, true, false, false, false]],
-    ['view trash', (r) => p.canViewTrash(user(r)), [true, true, true, true, false]],
-    ['restore own', (r) => p.canRestore(user(r), 'me'), [true, true, true, true, false]],
-    ['restore others', (r) => p.canRestore(user(r), 'x'), [true, true, false, false, false]],
-    ['purge', (r) => p.canPurge(user(r)), [true, true, false, false, false]],
-    ['invite VIEWER', (r) => p.canInvite(user(r), 'VIEWER'), [true, true, false, false, false]],
-    ['invite MEDIA_ADMIN', (r) => p.canInvite(user(r), 'MEDIA_ADMIN'), [true, false, false, false, false]],
-    ['manage a PASTOR', (r) => p.canManageUser(user(r), { id: 't', role: 'PASTOR' }), [true, true, false, false, false]],
-    ['manage a MEDIA_ADMIN', (r) => p.canManageUser(user(r), { id: 't', role: 'MEDIA_ADMIN' }), [true, false, false, false, false]],
-    ['promote to admin', (r) => p.canManageUser(user(r), { id: 't', role: 'PASTOR' }, 'MEDIA_ADMIN'), [true, false, false, false, false]],
-    ['manage categories', (r) => p.canManageCategories(user(r)), [true, false, false, false, false]],
-    ['view audit', (r) => p.canViewAudit(user(r)), [true, true, false, false, false]],
+    ['view published', (r) => p.canViewEvent(user(r), { categoryId: CAT, createdById: 'x', status: 'PUBLISHED' }), [true, true, true, true]],
+    ['create event in granted cat', (r) => p.canCreateEvent(user(r, upload), CAT), [true, true, true, false]],
+    ['create event in other cat', (r) => p.canCreateEvent(user(r, upload), OTHER), [true, false, false, false]],
+    ['create event without grant', (r) => p.canCreateEvent(user(r), CAT), [true, false, false, false]],
+    ['edit own media', (r) => p.canEditMedia(user(r), { uploadedById: 'me', categoryId: CAT }), [true, true, true, false]],
+    ['edit others media w/o manage', (r) => p.canEditMedia(user(r, upload), { uploadedById: 'x', categoryId: CAT }), [true, false, false, false]],
+    ['edit others media with manage', (r) => p.canEditMedia(user(r, manage), { uploadedById: 'x', categoryId: CAT }), [true, true, true, false]],
+    ['edit own event', (r) => p.canEditEvent(user(r), { categoryId: CAT, createdById: 'me', status: 'PUBLISHED' }), [true, true, true, false]],
+    ['move with manage on one side only', (r) => p.canMoveMedia(user(r, manage), CAT, OTHER), [true, false, false, false]],
+    ['view trash', (r) => p.canViewTrash(user(r)), [true, true, true, false]],
+    ['restore own', (r) => p.canRestore(user(r), 'me'), [true, true, true, false]],
+    ['restore others', (r) => p.canRestore(user(r), 'x'), [true, false, false, false]],
+    ['purge', (r) => p.canPurge(user(r)), [true, false, false, false]],
+    ['invite VIEWER', (r) => p.canInvite(user(r), 'VIEWER'), [true, false, false, false]],
+    ['invite SUPER_ADMIN', (r) => p.canInvite(user(r), 'SUPER_ADMIN'), [true, false, false, false]],
+    ['manage a PASTOR', (r) => p.canManageUser(user(r), { id: 't', role: 'PASTOR' }), [true, false, false, false]],
+    ['manage a SUPER_ADMIN', (r) => p.canManageUser(user(r), { id: 't', role: 'SUPER_ADMIN' }), [true, false, false, false]],
+    ['promote to admin', (r) => p.canManageUser(user(r), { id: 't', role: 'PASTOR' }, 'SUPER_ADMIN'), [true, false, false, false]],
+    ['manage categories', (r) => p.canManageCategories(user(r)), [true, false, false, false]],
+    ['view audit', (r) => p.canViewAudit(user(r)), [true, false, false, false]],
   ];
 
   for (const [name, fn, expected] of cases) {
@@ -53,7 +53,7 @@ describe('drafts and hidden categories', () => {
   const draft = { categoryId: CAT, createdById: 'x', status: 'DRAFT' as const };
   it('draft hidden from non-owner pastor', () => expect(p.canViewEvent(user('PASTOR'), draft)).toBe(false));
   it('draft visible to creator', () => expect(p.canViewEvent(user('PASTOR', {}, 'x'), draft)).toBe(true));
-  it('draft visible to manager', () => expect(p.canViewEvent(user('MEDIA_TEAM', manage), draft)).toBe(true));
+  it('draft visible to manager', () => expect(p.canViewEvent(user('SHEPHERD', manage), draft)).toBe(true));
   it('canView=false hides a category', () =>
     expect(p.canViewCategory(user('VIEWER', { canView: false }), CAT)).toBe(false));
   it('nobody manages themselves', () => expect(p.canManageUser(user('SUPER_ADMIN'), { id: 'me', role: 'SUPER_ADMIN' })).toBe(false));
@@ -63,22 +63,22 @@ describe('sharing', () => {
   const ev = { categoryId: CAT, createdById: 'x', status: 'PUBLISHED' as const };
   it('pastors can share', () => expect(p.canShareEvent(user('PASTOR'), ev)).toBe(true));
   it('viewers cannot share', () => expect(p.canShareEvent(user('VIEWER'), ev)).toBe(false));
-  it('media team shares only own/managed', () => {
-    expect(p.canShareEvent(user('MEDIA_TEAM'), ev)).toBe(false);
-    expect(p.canShareEvent(user('MEDIA_TEAM', manage), ev)).toBe(true);
+  it('shepherds share only own/managed', () => {
+    expect(p.canShareEvent(user('SHEPHERD'), ev)).toBe(false);
+    expect(p.canShareEvent(user('SHEPHERD', manage), ev)).toBe(true);
   });
 });
 
 describe('role permissions', () => {
   const withPerm = (role: Role) => ({ ...user(role), rolePermissions: new Set(['MANAGE_CATEGORIES']) });
   it('only Super Admin manages folders by default', () => {
-    expect(ROLES.map((r) => p.canManageCategories(user(r)))).toEqual([true, false, false, false, false]);
+    expect(ROLES.map((r) => p.canManageCategories(user(r)))).toEqual([true, false, false, false]);
   });
   it('a granted role can manage folders', () => {
-    expect(ROLES.map((r) => p.canManageCategories(withPerm(r)))).toEqual([true, true, true, true, true]);
+    expect(ROLES.map((r) => p.canManageCategories(withPerm(r)))).toEqual([true, true, true, true]);
   });
   it('only Super Admin edits role permissions, even with grants', () => {
-    expect(ROLES.map((r) => p.canManageRolePermissions(withPerm(r)))).toEqual([true, false, false, false, false]);
+    expect(ROLES.map((r) => p.canManageRolePermissions(withPerm(r)))).toEqual([true, false, false, false]);
   });
 });
 
@@ -87,18 +87,18 @@ describe('membership', () => {
   const mine = { pastorId: 'me', createdById: 'x' };
   const theirs = { pastorId: 'x', createdById: 'x' };
   it('Super Admin and pastors view; others need a grant', () => {
-    expect(ROLES.map((r) => p.canViewMembership(user(r)))).toEqual([true, false, false, true, false]);
+    expect(ROLES.map((r) => p.canViewMembership(user(r)))).toEqual([true, true, true, false]);
     expect(p.canViewMembership(perm('VIEWER', 'VIEW_MEMBERSHIP'))).toBe(true);
   });
   it('pastors create groups and manage only their own', () => {
-    expect(ROLES.map((r) => p.canCreateGroup(user(r)))).toEqual([true, false, false, true, false]);
+    expect(ROLES.map((r) => p.canCreateGroup(user(r)))).toEqual([true, true, false, false]);
     expect(p.canManageGroup(user('PASTOR'), mine)).toBe(true);
     expect(p.canManageGroup(user('PASTOR'), theirs)).toBe(false);
     expect(p.canManageGroup(user('SUPER_ADMIN'), theirs)).toBe(true);
-    expect(p.canManageGroup(user('MEDIA_ADMIN'), theirs)).toBe(false);
+    expect(p.canManageGroup(user('VIEWER'), theirs)).toBe(false);
   });
   it('MANAGE_MEMBERSHIP grant gives full control', () => {
-    const u = perm('MEDIA_TEAM', 'MANAGE_MEMBERSHIP');
+    const u = perm('VIEWER', 'MANAGE_MEMBERSHIP');
     expect(p.canManageGroup(u, theirs) && p.canAssignPastor(u) && p.canRecordSunday(u) && p.canViewMembership(u)).toBe(true);
   });
   it('only admins pick another pastor', () => {
@@ -137,7 +137,7 @@ describe('shepherds', () => {
     expect(p.canUpload(sh, 'cat-granted')).toBe(false);
   });
   it('only Super Admin sees the leaders list', () => {
-    expect(ROLES.map((r) => p.canViewLeaders(user(r)))).toEqual([true, false, false, false, false]);
+    expect(ROLES.map((r) => p.canViewLeaders(user(r)))).toEqual([true, false, false, false]);
   });
 });
 

@@ -40,7 +40,7 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('PASTOR');
   const [cats, setCats] = useState<string[]>([]);
-  const roles = ROLES.filter((r) => me.data?.role === 'SUPER_ADMIN' || !['SUPER_ADMIN', 'MEDIA_ADMIN'].includes(r));
+  const roles = ROLES.filter((r) => me.data?.role === 'SUPER_ADMIN' || r !== 'SUPER_ADMIN');
   const invite = useMutation({
     mutationFn: () => api('/invitations', { method: 'POST', body: { email, role, categoryIds: cats } }),
     onSuccess: () => {
@@ -52,7 +52,7 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const contributor = role === 'MEDIA_TEAM' || role === 'PASTOR' || role === 'SHEPHERD';
+  const contributor = role === 'PASTOR' || role === 'SHEPHERD';
   return (
     <Dialog
       open={open}
@@ -104,7 +104,7 @@ function EditUserDialog({ user, onClose }: { user: UserRow | null; onClose: () =
   const [grants, setGrants] = useState<GrantRow[] | null>(null);
   const r = role ?? user?.role;
   const g = grants ?? user?.categoryAccess ?? [];
-  const roles = ROLES.filter((x) => me.data?.role === 'SUPER_ADMIN' || !['SUPER_ADMIN', 'MEDIA_ADMIN'].includes(x));
+  const roles = ROLES.filter((x) => me.data?.role === 'SUPER_ADMIN' || x !== 'SUPER_ADMIN');
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['users'] });
   const save = useMutation({
     mutationFn: async () => {

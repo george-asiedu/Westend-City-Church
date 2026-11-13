@@ -110,7 +110,7 @@ export class InvitationsService {
     const inv = await this.findValid(dto.token);
     await this.passwords.assertStrong(dto.password, [inv.email, dto.fullName]);
     const passwordHash = await this.passwords.hash(dto.password);
-    const contributor = inv.role === 'MEDIA_TEAM' || inv.role === 'PASTOR' || inv.role === 'SHEPHERD';
+    const contributor = inv.role === 'PASTOR' || inv.role === 'SHEPHERD';
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.invitation.updateMany({ where: { id: inv.id, acceptedAt: null }, data: { acceptedAt: new Date() } });
       if (claimed.count !== 1) throw badRequest('INVITE_INVALID', 'This invitation was already used');

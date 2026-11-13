@@ -237,7 +237,7 @@ export class AuthService {
   }
 
   async disable2fa(user: AuthUser, password: string, code: string, meta: ReqMeta): Promise<void> {
-    if (this.env.REQUIRE_2FA_FOR_ADMINS && (user.role === 'SUPER_ADMIN' || user.role === 'MEDIA_ADMIN'))
+    if (this.env.REQUIRE_2FA_FOR_ADMINS && user.role === 'SUPER_ADMIN')
       throw forbidden('Admins must keep two-factor authentication on');
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     if (!u.totpEnabled || !u.totpSecretEnc) throw badRequest('TOTP_NOT_ENABLED', 'Two-factor authentication is off');

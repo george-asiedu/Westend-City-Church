@@ -1,15 +1,13 @@
 // Mirrors the Prisma enums so the web app never imports @prisma/client.
 export const Role = {
   SUPER_ADMIN: 'SUPER_ADMIN',
-  MEDIA_ADMIN: 'MEDIA_ADMIN',
-  MEDIA_TEAM: 'MEDIA_TEAM',
   PASTOR: 'PASTOR',
   SHEPHERD: 'SHEPHERD',
   VIEWER: 'VIEWER',
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 export const ROLES = Object.values(Role);
-export const ADMIN_ROLES: readonly Role[] = [Role.SUPER_ADMIN, Role.MEDIA_ADMIN];
+export const ADMIN_ROLES: readonly Role[] = [Role.SUPER_ADMIN];
 
 export const UserStatus = { INVITED: 'INVITED', ACTIVE: 'ACTIVE', SUSPENDED: 'SUSPENDED' } as const;
 export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
@@ -42,8 +40,6 @@ export type ExportStatus = (typeof ExportStatus)[keyof typeof ExportStatus];
 
 export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
-  MEDIA_ADMIN: 'Media Admin',
-  MEDIA_TEAM: 'Media Team',
   PASTOR: 'Pastor',
   SHEPHERD: 'Shepherd',
   VIEWER: 'Viewer',

@@ -11,7 +11,7 @@ import { AuditService } from '../audit/audit.service';
 import { forbidden } from '../common/errors';
 
 /** Roles a Super Admin can grant extra permissions to (Super Admin already has all). */
-const GRANTABLE_ROLES: Role[] = ['MEDIA_ADMIN', 'MEDIA_TEAM', 'PASTOR', 'SHEPHERD', 'VIEWER'];
+const GRANTABLE_ROLES: Role[] = ['PASTOR', 'SHEPHERD', 'VIEWER'];
 const PERMISSIONS = Object.values(ROLE_PERMISSIONS);
 
 class RolePermissionItem {
