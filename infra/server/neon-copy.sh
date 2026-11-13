@@ -10,6 +10,8 @@
 # Safety:
 #   - Refuses to run while the app itself still uses that Neon database (it would wipe
 #     live data). It only starts once DATABASE_URL in /etc/wcc/app.env points elsewhere.
+#   - Refuses to copy an empty database, or one with fewer users than Neon (data not
+#     imported yet, or something went wrong on this server).
 #   - Restores in one transaction: if anything fails, Neon keeps yesterday's copy.
 #   - Checks Neon's PostgreSQL version can take this server's dumps.
 #   - Never fails the backup itself: a problem here is logged, the local dump stays.
@@ -54,6 +56,19 @@ if [ "${NEON_MAJOR}" -lt "${LOCAL_MAJOR}" ]; then
   exit 0
 fi
 
+# Never replace a fuller database with an emptier one (e.g. before the data was imported).
+psql_local() { sudo -u postgres "${BIN}/psql" -p "${WCC_DB_PORT:-5432}" -d "${DB}" -qAtc "$1"; }
+LOCAL_USERS="$(psql_local 'SELECT count(*) FROM "User"' 2>/dev/null || echo 0)"
+NEON_USERS="$("${BIN}/psql" "${NEON}" -qAtc 'SELECT count(*) FROM "User"' 2>/dev/null || echo 0)"
+if [ "${LOCAL_USERS:-0}" -eq 0 ]; then
+  log "REFUSING: this server's database has no users yet (run import-from-neon.sh first). Neon left as it is."
+  exit 0
+fi
+if [ "${NEON_USERS:-0}" -gt "${LOCAL_USERS}" ]; then
+  log "REFUSING: Neon has more users (${NEON_USERS}) than this server (${LOCAL_USERS}); it may hold data that isn't here. Neon left as it is."
+  exit 0
+fi
+
 log "loading $(basename "${DUMP}") into Neon (PostgreSQL ${NEON_MAJOR})"
 LIST="$(mktemp)"
 trap 'rm -f "${LIST}"' EXIT
@@ -65,7 +80,6 @@ if ! "${BIN}/pg_restore" --clean --if-exists --no-owner --no-privileges --single
 fi
 
 # Compare a few row counts so a silent mismatch shows up in the log.
-psql_local() { sudo -u postgres "${BIN}/psql" -p "${WCC_DB_PORT:-5432}" -d "${DB}" -qAtc "$1"; }
 for t in User Member AttendanceSession AttendanceRecord; do
   a="$(psql_local "SELECT count(*) FROM \"${t}\"" 2>/dev/null || echo '?')"
   b="$("${BIN}/psql" "${NEON}" -qAtc "SELECT count(*) FROM \"${t}\"")"
