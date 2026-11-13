@@ -11,7 +11,10 @@ import { useMe } from '@/lib/queries';
 import { formatDay, useGroups } from '@/lib/membership';
 import { cn } from '@/lib/utils';
 
-function GroupCard({ g }: { g: GroupDto }) {
+function GroupCard({ g, meId }: { g: GroupDto; meId?: string }) {
+  // Only shown when you personally lead or shepherd it (a Super Admin can edit everything).
+  const youLead = !!meId && (g.pastor?.id === meId || g.parent?.pastor?.id === meId);
+  const youShepherd = !!meId && g.shepherds.some((s) => s.id === meId);
   return (
     // The name link stretches over the whole card; the pastor's phone/email links sit above it.
     <Card className={cn('relative h-full min-w-0 space-y-3 p-4 transition-colors hover:border-brand/50', !g.isActive && 'opacity-60')}>
@@ -23,7 +26,7 @@ function GroupCard({ g }: { g: GroupDto }) {
           </h3>
           <div className="flex shrink-0 gap-1">
             {!g.isActive && <Badge tone="warning">Inactive</Badge>}
-            {g.canAdminister ? <Badge tone="brand">Yours</Badge> : g.canManage ? <Badge tone="brand">Shepherding</Badge> : null}
+            {youLead ? <Badge tone="brand">You lead</Badge> : youShepherd ? <Badge tone="brand">You shepherd</Badge> : null}
           </div>
         </div>
         {g.parent && <p className="text-xs text-muted">in {g.parent.name}</p>}
@@ -94,7 +97,7 @@ export default function GroupsPage() {
       {list.length ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {list.map((g) => (
-            <GroupCard key={g.id} g={g} />
+            <GroupCard key={g.id} g={g} meId={me.data?.id} />
           ))}
         </div>
       ) : (

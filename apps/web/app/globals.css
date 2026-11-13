@@ -126,6 +126,17 @@ textarea {
   padding-top: env(safe-area-inset-top);
 }
 
+/* Headings are Title Case everywhere (“By Constituency”). Kept in the base layer so a
+   heading styled with the \`uppercase\` utility (small section labels) stays all-caps. */
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-transform: capitalize;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;

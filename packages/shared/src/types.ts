@@ -314,3 +314,15 @@ export interface DayRollupDto {
   services: Array<{ id: string; serviceType: string; title: string | null; present: number; visitors: number }>;
   bacentas: Array<{ id: string; name: string; pastorId: string | null; present: number | null }>;
 }
+
+/** A member's next birthday, for "Upcoming birthdays". */
+export interface UpcomingBirthdayDto {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  /** YYYY-MM-DD of the next birthday (today counts). */
+  date: string;
+  daysAway: number;
+  /** Age they turn, if the year of birth is known. */
+  turning: number | null;
+}

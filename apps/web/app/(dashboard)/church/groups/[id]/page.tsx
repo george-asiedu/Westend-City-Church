@@ -13,7 +13,7 @@ import { Field, Input, Select } from '@/components/ui/form';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, GroupFormDialog, MemberFormDialog, PastorCard } from '@/components/church/church-ui';
 import { GroupStatsPanel } from '@/components/church/group-stats';
-import { AddExistingDialog, BasontasCard, MemberTeamsDialog, TeamsCard } from '@/components/church/group-parts';
+import { AddExistingDialog, BasontasCard, BirthdaysCard, MemberTeamsDialog, TeamsCard } from '@/components/church/group-parts';
 import { api, errorMessage } from '@/lib/api';
 import { useMe } from '@/lib/queries';
 import { bacentaLabel, downloadCsv, fetchAll, formatDay, memberDefaultsFor, mk, sessionName, useCursorList, useGroups, useShepherdCandidates, type SessionRow } from '@/lib/membership';
@@ -238,6 +238,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             </Card>
             {g.type === 'CONSTITUENCY' && <BasontasCard g={g} onAdd={() => setAddingBasonta(true)} />}
             {g.type === 'BACENTA' && <TeamsCard g={g} />}
+            <BirthdaysCard groupId={g.id} />
             <ShepherdsCard g={g} />
             {g.description && (
               <Card className="p-4 text-sm">

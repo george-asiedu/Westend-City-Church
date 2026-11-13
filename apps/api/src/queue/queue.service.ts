@@ -1,6 +1,6 @@
 import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import { NOTIFY_JOBS, QUEUES, type MailJob, type ProcessMediaJob, type PurgeMediaJob, type ExportJobData } from '@wcc/shared';
+import { NOTIFY_JOBS, QUEUES, type RemindGroupsJob, type MailJob, type ProcessMediaJob, type PurgeMediaJob, type ExportJobData } from '@wcc/shared';
 import { ENV, Env } from '../config/env';
 
 /** BullMQ producers. Consumers live in apps/worker. */
@@ -53,6 +53,10 @@ export class QueueService implements OnModuleDestroy {
 
   async exportZip(data: ExportJobData): Promise<void> {
     await this.queue(QUEUES.EXPORT).add('build', data, { jobId: `export-${data.exportId}`, attempts: 2, removeOnComplete: 500 });
+  }
+
+  async remindGroups(data: RemindGroupsJob): Promise<void> {
+    await this.queue(QUEUES.NOTIFY).add(NOTIFY_JOBS.REMIND_GROUPS, data, { removeOnComplete: 100, removeOnFail: 100 });
   }
 
   async testPush(userId: string): Promise<void> {

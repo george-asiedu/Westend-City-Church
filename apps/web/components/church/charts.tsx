@@ -124,7 +124,7 @@ export function Doughnut({ title, slices, centerLabel = 'total', size = 132 }: {
         </g>
       </svg>
       <figcaption className="min-w-0 space-y-1.5 text-sm">
-        <p className="font-medium">{title}</p>
+        <h3 className="font-medium">{title}</h3>
         <ul className="space-y-1">
           {parts.map((p, i) => (
             <li

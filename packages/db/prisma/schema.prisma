@@ -79,6 +79,7 @@ model User {
   /// Push notification preferences.
   notifyReminders   Boolean    @default(true)
   notifyStats       Boolean    @default(true)
+  notifyBirthdays   Boolean    @default(true)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 

@@ -13,10 +13,12 @@ import type {
   PastorDto,
   SessionInfoDto,
   SessionRowDto,
+  UpcomingBirthdayDto,
 } from '@wcc/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PolicyService, type GroupRef } from '../policy/policy.service';
 import { AuditService } from '../audit/audit.service';
+import { QueueService } from '../queue/queue.service';
 import { AppException, badRequest, forbidden, notFound } from '../common/errors';
 import { cursorArgs, fromDateOnly, pageOf, pageSize, toDateOnly } from '../common/pagination';
 import type { AuthUser } from '../common/auth-user';
@@ -141,6 +143,7 @@ export class MembershipService {
     private readonly prisma: PrismaService,
     private readonly policy: PolicyService,
     private readonly audit: AuditService,
+    private readonly queue: QueueService,
   ) {}
 
   private assertView(user: AuthUser) {
@@ -477,6 +480,56 @@ export class MembershipService {
       total,
       stats: { pastors, shepherds, newPastors, newShepherds, unassigned: unassignedN, neverSignedIn },
     };
+  }
+
+  /** Members of a group with a birthday in the next `days` days (today included), soonest first. */
+  async upcomingBirthdays(user: AuthUser, id: string, days = 30): Promise<UpcomingBirthdayDto[]> {
+    this.assertView(user);
+    const g = await this.loadGroup(id);
+    const rows = await this.prisma.member.findMany({
+      where: { ...memberWhereFor(g), isActive: true, dateOfBirth: { not: null } },
+      select: { id: true, fullName: true, phone: true, dateOfBirth: true },
+    });
+    const today = toDateOnly(new Date().toISOString().slice(0, 10));
+    const y = today.getUTCFullYear();
+    const leap = (yr: number) => (yr % 4 === 0 && yr % 100 !== 0) || yr % 400 === 0;
+    const next = (dob: Date) => {
+      for (const yr of [y, y + 1]) {
+        let m = dob.getUTCMonth();
+        let d = dob.getUTCDate();
+        if (m === 1 && d === 29 && !leap(yr)) d = 28; // 29 Feb → 28 Feb in other years
+        const at = new Date(Date.UTC(yr, m, d));
+        if (at >= today) return at;
+      }
+      return null;
+    };
+    return rows
+      .map((r) => {
+        const at = next(r.dateOfBirth!)!;
+        const daysAway = Math.round((at.getTime() - today.getTime()) / 86_400_000);
+        const born = r.dateOfBirth!.getUTCFullYear();
+        return { id: r.id, fullName: r.fullName, phone: r.phone, date: fromDateOnly(at)!, daysAway, turning: born > 1900 ? at.getUTCFullYear() - born : null };
+      })
+      .filter((r) => r.daysAway <= days)
+      .sort((a, b) => a.daysAway - b.daysAway || a.fullName.localeCompare(b.fullName));
+  }
+
+  /**
+   * Super Admin: ask the leaders of basontas that haven't recorded `date` to do it now.
+   * Returns how many leaders will be asked and how many of them have notifications on.
+   */
+  async remindGroups(user: AuthUser, date: string, groupIds: string[], meta: ReqMeta) {
+    if (!this.policy.isMembershipAdmin(user)) throw forbidden('Only a Super Admin can send reminders');
+    this.checkDate(date);
+    const r = await dayRollup(this.prisma, date);
+    const missing = r.constituencies.flatMap((c) => c.basontas).filter((b) => groupIds.includes(b.id) && b.present === null);
+    const leaders = [...new Set(missing.flatMap((b) => [b.pastorId, ...b.shepherdIds]).filter((u): u is string => !!u))];
+    const withDevices = leaders.length
+      ? (await this.prisma.pushSubscription.findMany({ where: { userId: { in: leaders }, user: { notifyReminders: true, status: 'ACTIVE' } }, distinct: ['userId'], select: { userId: true } })).length
+      : 0;
+    if (leaders.length) await this.queue.remindGroups({ date, groupIds: missing.map((b) => b.id), requestedBy: user.id });
+    await this.audit.record({ actorId: user.id, action: 'ATTENDANCE_REMINDER_SENT', entityType: 'ATTENDANCE', metadata: { date, basontas: missing.map((b) => b.name), leaders: leaders.length }, meta });
+    return { basontas: missing.length, leaders: leaders.length, withDevices, noLeader: missing.filter((b) => !b.pastorId && !b.shepherdIds.length).map((b) => b.name) };
   }
 
   // ---------------------------------------------------------------- bacenta team roles

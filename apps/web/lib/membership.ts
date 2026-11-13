@@ -169,3 +169,30 @@ export async function fetchAll<T>(path: string, query: Record<string, string | n
   } while (cursor && out.length < 20000);
   return out;
 }
+
+/** WhatsApp chat link for a Ghana number in any common form (0XX…, +233…, 233…). */
+export function whatsappLink(phone: string, text?: string): string {
+  let d = phone.replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.startsWith('0')) d = `233${d.slice(1)}`;
+  else if (d.length === 9) d = `233${d}`;
+  return `https://wa.me/${d}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+}
+
+/** Previous/Next over a list that's already loaded (same shape the Pager expects). */
+export function useClientPage<T>(all: T[], size = PAGE_SIZE) {
+  const [index, setIndex] = useState(0);
+  const pages = Math.max(1, Math.ceil(all.length / size));
+  const i = Math.min(index, pages - 1); // the list shrank (new period/filter)
+  useEffect(() => setIndex(0), [all.length]);
+  return {
+    items: all.slice(i * size, i * size + size),
+    total: all.length,
+    page: i + 1,
+    offset: i * size,
+    hasPrev: i > 0,
+    hasNext: i < pages - 1,
+    prev: () => setIndex(Math.max(0, i - 1)),
+    next: () => setIndex(Math.min(pages - 1, i + 1)),
+  };
+}

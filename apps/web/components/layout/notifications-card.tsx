@@ -16,6 +16,7 @@ interface Config {
   devices: number;
   notifyReminders: boolean;
   notifyStats: boolean;
+  notifyBirthdays: boolean;
 }
 
 function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {
@@ -110,7 +111,7 @@ export function NotificationsCard() {
         {state === 'on' && <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">On for this device</span>}
       </div>
       <p className="text-sm text-muted">
-        Reminders to record attendance (Saturdays 8pm and Sundays 1pm, if your group hasn’t yet), and the day’s numbers afterwards.
+        Reminders to record attendance (Saturdays 8pm and Sundays 1pm, if your group hasn’t yet), the day’s numbers afterwards, and birthdays in your groups (7am).
       </p>
 
       {c && !c.publicKey ? (
@@ -150,6 +151,7 @@ export function NotificationsCard() {
         <div className="space-y-2 border-t border-border pt-3">
           <Checkbox label="Attendance reminders" checked={c.notifyReminders} disabled={prefs.isPending} onChange={(e) => prefs.mutate({ notifyReminders: e.target.checked })} />
           <Checkbox label="Weekend attendance numbers" checked={c.notifyStats} disabled={prefs.isPending} onChange={(e) => prefs.mutate({ notifyStats: e.target.checked })} />
+          <Checkbox label="Birthdays in my groups" checked={c.notifyBirthdays} disabled={prefs.isPending} onChange={(e) => prefs.mutate({ notifyBirthdays: e.target.checked })} />
           <p className="text-xs text-muted">
             These apply to all your devices{c.devices ? ` (${c.devices} with notifications on)` : ''}.
           </p>

@@ -50,6 +50,8 @@ const schema = z.object({
   REMINDER_CRON_SUNDAY: z.string().default('0 13 * * 0'),
   STATS_CRON_SATURDAY: z.string().default('0 22 * * 6'),
   STATS_CRON_SUNDAY: z.string().default('0 18 * * 0'),
+  /** Daily birthday notifications (cron, NOTIFY_TZ). */
+  BIRTHDAY_CRON: z.string().default('0 7 * * *'),
 });
 
 export type Env = z.infer<typeof schema>;

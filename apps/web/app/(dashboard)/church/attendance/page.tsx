@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ClipboardCheck, Download, Phone, UserPlus, UserX } from 'lucide-react';
@@ -16,7 +16,7 @@ import { GroupStatsPanel, Stat } from '@/components/church/group-stats';
 import { DayBreakdown } from '@/components/church/day-breakdown';
 import { api } from '@/lib/api';
 import { useMe } from '@/lib/queries';
-import { addDays, canAddMembers, downloadCsv, formatDay, localDate, mk, sessionName, useCursorList, useGroups, type SessionRow, type Summary } from '@/lib/membership';
+import { addDays, canAddMembers, downloadCsv, formatDay, localDate, mk, sessionName, useClientPage, useCursorList, useGroups, type SessionRow, type Summary } from '@/lib/membership';
 
 const RANGES = [
   { label: 'Last 4 weeks', days: 27 },
@@ -39,6 +39,9 @@ function ChurchStats() {
   const converts = services.reduce((a, x) => a + x.newConverts, 0);
   const members = services.reduce((a, x) => a + x.members, 0);
   const brought = s ? s.guests.visit + s.guests.joining : 0;
+  // Tables show 10 at a time with Previous/Next, like the other lists.
+  const servicePage = useClientPage(useMemo(() => [...services].reverse(), [services]));
+  const groupPage = useClientPage(s?.groups ?? []);
 
   const exportCsv = () => {
     if (!s) return;
@@ -161,6 +164,7 @@ function ChurchStats() {
           <Card className="p-4">
             <h2 className="mb-3 font-semibold">Services</h2>
             {services.length ? (
+              <>
               <Table>
                 <THead>
                   <tr>
@@ -173,7 +177,7 @@ function ChurchStats() {
                   </tr>
                 </THead>
                 <TBody>
-                  {[...services].reverse().map((x) => (
+                  {servicePage.items.map((x) => (
                     <Tr key={x.id}>
                       <Td className="whitespace-nowrap">{formatDay(x.date)}</Td>
                       <Td>
@@ -191,6 +195,8 @@ function ChurchStats() {
                   ))}
                 </TBody>
               </Table>
+              <Pager list={servicePage} />
+              </>
             ) : (
               <p className="text-sm text-muted">No church services recorded in this period.</p>
             )}
@@ -200,6 +206,7 @@ function ChurchStats() {
             <h2 className="mb-1 font-semibold">Groups</h2>
             <p className="mb-3 text-xs text-muted">Constituencies show the total of their basontas per meeting day.</p>
             {s.groups.length ? (
+              <>
               <Table>
                 <THead>
                   <tr>
@@ -212,7 +219,7 @@ function ChurchStats() {
                   </tr>
                 </THead>
                 <TBody>
-                  {s.groups.map((g) => (
+                  {groupPage.items.map((g) => (
                     <Tr key={g.id}>
                       <Td>
                         <Link href={`/church/groups/${g.id}`} className="font-medium hover:text-brand">
@@ -229,6 +236,8 @@ function ChurchStats() {
                   ))}
                 </TBody>
               </Table>
+              <Pager list={groupPage} />
+              </>
             ) : (
               <p className="text-sm text-muted">No groups yet.</p>
             )}

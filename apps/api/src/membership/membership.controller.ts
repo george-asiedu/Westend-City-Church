@@ -1,3 +1,4 @@
+import { Throttle } from '@nestjs/throttler';
 import { Body, Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -150,6 +151,13 @@ class SessionQuery extends PageQuery {
   /** Church services plus the groups this user looks after. */
   @IsOptional() @Transform(({ value }) => value === true || value === 'true' || value === '1') @IsBoolean() mine?: boolean;
 }
+class DaysQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(366) days?: number;
+}
+class RemindDto {
+  @Matches(DATE) date!: string;
+  @IsArray() @ArrayMaxSize(500) @IsUUID('4', { each: true }) groupIds!: string[];
+}
 class DayQuery {
   @Matches(DATE) date!: string;
 }
@@ -187,6 +195,11 @@ export class GroupsController {
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.getGroup(user, id);
+  }
+
+  @Get(':id/birthdays')
+  birthdays(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Query() q: DaysQuery) {
+    return this.svc.upcomingBirthdays(user, id, q.days ?? 30);
   }
 
   @Get(':id/stats')
@@ -337,6 +350,14 @@ export class AttendanceController {
   @Get('guests/pending')
   pendingGuests(@CurrentUser() user: AuthUser, @Query() q: PageQuery) {
     return this.svc.pendingGuests(user, q);
+  }
+
+  /** Super Admin: remind the leaders of basontas that haven't recorded that day. */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('remind')
+  @HttpCode(202)
+  remind(@CurrentUser() user: AuthUser, @Body() dto: RemindDto, @Meta() meta: ReqMeta) {
+    return this.svc.remindGroups(user, dto.date, dto.groupIds, meta);
   }
 
   /** One day by constituency (sum of basontas). */

@@ -7,7 +7,7 @@ import { log } from './log';
 export const pushConfigured = !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY);
 if (pushConfigured) webpush.setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC_KEY!, env.VAPID_PRIVATE_KEY!);
 
-export type PushKind = 'reminder' | 'stats' | 'test';
+export type PushKind = 'reminder' | 'stats' | 'birthday' | 'test';
 
 /**
  * Sends one payload to every device of each user (respecting their preferences).
@@ -19,7 +19,7 @@ export async function pushToUsers(userIds: string[], payload: PushPayload, kind:
   const subs = await prisma.pushSubscription.findMany({
     where: {
       userId: { in: [...new Set(userIds)] },
-      user: { status: 'ACTIVE', ...(kind === 'reminder' ? { notifyReminders: true } : kind === 'stats' ? { notifyStats: true } : {}) },
+      user: { status: 'ACTIVE', ...(kind === 'reminder' ? { notifyReminders: true } : kind === 'stats' ? { notifyStats: true } : kind === 'birthday' ? { notifyBirthdays: true } : {}) },
     },
   });
   const body = JSON.stringify(payload);

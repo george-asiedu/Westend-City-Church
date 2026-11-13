@@ -25,6 +25,7 @@ class EndpointDto {
 class PrefsDto {
   @IsOptional() @IsBoolean() notifyReminders?: boolean;
   @IsOptional() @IsBoolean() notifyStats?: boolean;
+  @IsOptional() @IsBoolean() notifyBirthdays?: boolean;
 }
 
 @Controller('notifications')
@@ -40,7 +41,7 @@ export class NotificationsController {
   @Get()
   async config(@CurrentUser() user: AuthUser) {
     const [u, devices] = await Promise.all([
-      this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { notifyReminders: true, notifyStats: true } }),
+      this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { notifyReminders: true, notifyStats: true, notifyBirthdays: true } }),
       this.prisma.pushSubscription.count({ where: { userId: user.id } }),
     ]);
     return { publicKey: this.env.VAPID_PUBLIC_KEY ?? null, devices, ...u };
@@ -76,7 +77,7 @@ export class NotificationsController {
   @AllowPending2fa()
   @Patch('preferences')
   async prefs(@CurrentUser() user: AuthUser, @Body() dto: PrefsDto) {
-    return this.prisma.user.update({ where: { id: user.id }, data: dto, select: { notifyReminders: true, notifyStats: true } });
+    return this.prisma.user.update({ where: { id: user.id }, data: dto, select: { notifyReminders: true, notifyStats: true, notifyBirthdays: true } });
   }
 
   @AllowPending2fa()

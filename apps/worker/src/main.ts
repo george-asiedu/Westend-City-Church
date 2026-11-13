@@ -56,6 +56,7 @@ async function scheduleNotifications(): Promise<void> {
     ['reminder-sunday', NOTIFY_JOBS.ATTENDANCE_REMINDER, env.REMINDER_CRON_SUNDAY],
     ['stats-saturday', NOTIFY_JOBS.WEEKEND_STATS, env.STATS_CRON_SATURDAY],
     ['stats-sunday', NOTIFY_JOBS.WEEKEND_STATS, env.STATS_CRON_SUNDAY],
+    ['birthdays-daily', NOTIFY_JOBS.BIRTHDAYS, env.BIRTHDAY_CRON],
   ];
   for (const [id, name, pattern] of plan) {
     if (env.NOTIFICATIONS_ENABLED && pushConfigured)

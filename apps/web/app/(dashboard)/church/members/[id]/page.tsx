@@ -4,13 +4,13 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Mail, MapPin, Pencil, Phone, Trash2 } from 'lucide-react';
+import { ArrowLeft, Mail, MapPin, MessageCircle, Pencil, Phone, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
 import { api, errorMessage } from '@/lib/api';
-import { formatDay, mk, sessionName, type MemberDetail } from '@/lib/membership';
+import { formatDay, mk, sessionName, whatsappLink, type MemberDetail } from '@/lib/membership';
 import { GUEST_INTENT_LABELS } from '@wcc/shared';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -68,9 +68,9 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
               </a>
             )}
             {d.phone && (
-              <a href={`sms:${d.phone}`}>
+              <a href={whatsappLink(d.phone, `Hello ${d.fullName.split(' ')[0]}, `)} target="_blank" rel="noopener noreferrer">
                 <Button size="sm" variant="outline">
-                  Text
+                  <MessageCircle className="h-4 w-4" /> WhatsApp
                 </Button>
               </a>
             )}

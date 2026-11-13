@@ -2,8 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ChevronDown } from 'lucide-react';
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { useMe } from '@/lib/queries';
+import { BellRing, ChevronDown } from 'lucide-react';
 import type { DayRollupDto } from '@wcc/shared';
 import { Input } from '@/components/ui/form';
 import { Badge, Card, PageLoader } from '@/components/ui/misc';
@@ -32,6 +35,21 @@ export function DayBreakdown() {
   const r = q.data;
   const max = Math.max(1, ...(r?.constituencies.map((c) => c.present ?? 0) ?? []));
   const missing = r?.constituencies.reduce((a, c) => a + c.basontas.filter((b) => b.present === null).length, 0) ?? 0;
+  const me = useMe();
+  const canRemind = !!me.data?.permissions.canManageMembership;
+  const remind = useMutation({
+    mutationFn: (groupIds: string[]) =>
+      api<{ basontas: number; leaders: number; withDevices: number; noLeader: string[] }>('/attendance/remind', { method: 'POST', body: { date, groupIds } }),
+    onSuccess: (x) => {
+      if (!x.basontas) return toast.info('They’ve all recorded now.');
+      const parts = [`Asked ${x.leaders} leader${x.leaders === 1 ? '' : 's'} of ${x.basontas} basonta${x.basontas === 1 ? '' : 's'}.`];
+      if (x.leaders > x.withDevices) parts.push(`${x.leaders - x.withDevices} haven’t turned notifications on.`);
+      if (x.noLeader.length) parts.push(`No pastor or shepherd for: ${x.noLeader.join(', ')}.`);
+      toast.success(parts.join(' '), { duration: 8000 });
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const allMissing = r?.constituencies.flatMap((c) => c.basontas.filter((b) => b.present === null).map((b) => b.id)) ?? [];
 
   return (
     <Card className="space-y-4 p-4">
@@ -69,6 +87,11 @@ export function DayBreakdown() {
               </Badge>
             )}
           </p>
+          {canRemind && missing > 0 && (
+            <Button size="sm" variant="outline" loading={remind.isPending && remind.variables?.length === allMissing.length} onClick={() => remind.mutate(allMissing)}>
+              <BellRing className="h-4 w-4" /> Remind all {missing} to record
+            </Button>
+          )}
           {r.constituencies.length ? (
             <ul className="space-y-2">
               {r.constituencies.map((c) => (
@@ -96,8 +119,20 @@ export function DayBreakdown() {
                             <Link href={`/church/groups/${b.id}`} className="min-w-0 truncate hover:text-brand">
                               {b.name}
                             </Link>
-                            <span className="shrink-0 tabular-nums">
+                            <span className="flex shrink-0 items-center gap-2 tabular-nums">
                               {b.present === null ? <Badge tone="warning">Not recorded</Badge> : `${b.present} of ${b.members}`}
+                              {b.present === null && canRemind && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2"
+                                  loading={remind.isPending && remind.variables?.length === 1 && remind.variables[0] === b.id}
+                                  onClick={() => remind.mutate([b.id])}
+                                  aria-label={`Remind ${b.name}’s leaders to record attendance`}
+                                >
+                                  <BellRing className="h-3.5 w-3.5" /> Remind
+                                </Button>
+                              )}
                             </span>
                           </li>
                         ))

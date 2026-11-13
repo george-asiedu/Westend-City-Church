@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { Cake, Check, MessageCircle, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { BACENTA_ROLE_SUGGESTIONS, GROUP_TYPE_LABELS, type GroupDto, type MemberDto } from '@wcc/shared';
+import { BACENTA_ROLE_SUGGESTIONS, GROUP_TYPE_LABELS, type GroupDto, type MemberDto, type UpcomingBirthdayDto } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/form';
 import { Card } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
-import { fetchAll, mk, type MemberPage } from '@/lib/membership';
+import { fetchAll, mk, whatsappLink, type MemberPage } from '@/lib/membership';
 import { cn } from '@/lib/utils';
 
 const useGroupUpdate = (id: string) => {
@@ -355,6 +355,52 @@ export function BasontasCard({ g, onAdd }: { g: GroupDto; onAdd?: () => void }) 
       ) : (
         <p className="text-sm text-muted">No basontas yet.</p>
       )}
+    </Card>
+  );
+}
+
+/** Members of this group with a birthday in the next 30 days. */
+export function BirthdaysCard({ groupId }: { groupId: string }) {
+  const q = useQuery({ queryKey: ['group', groupId, 'birthdays'], queryFn: () => api<UpcomingBirthdayDto[]>(`/groups/${groupId}/birthdays`, { query: { days: 30 } }) });
+  const list = q.data ?? [];
+  const when = (n: number) => (n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : `In ${n} days`);
+  return (
+    <Card className="space-y-3 p-4">
+      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted">
+        <Cake className="h-4 w-4" /> Upcoming birthdays
+      </h2>
+      {q.isLoading ? null : list.length ? (
+        <ul className="divide-y divide-border text-sm">
+          {list.slice(0, 8).map((b) => (
+            <li key={b.id} className={cn('flex min-w-0 items-center gap-2 py-2', b.daysAway === 0 && 'rounded-lg bg-brand/5 px-2')}>
+              <a href={`/church/members/${b.id}`} className="min-w-0 flex-1">
+                <p className="truncate font-medium hover:text-brand">
+                  {b.fullName} {b.daysAway === 0 && '🎂'}
+                </p>
+                <p className="truncate text-xs text-muted">
+                  {when(b.daysAway)} · {new Date(`${b.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {b.turning ? ` · turns ${b.turning}` : ''}
+                </p>
+              </a>
+              {b.phone && (
+                <a
+                  href={whatsappLink(b.phone, `Happy birthday ${b.fullName.split(' ')[0]}! 🎉`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded-lg p-2 text-brand hover:bg-surface-2"
+                  aria-label={`Send ${b.fullName} birthday wishes on WhatsApp`}
+                  title="Send wishes on WhatsApp"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">No birthdays in the next 30 days.</p>
+      )}
+      {list.length > 8 && <p className="text-xs text-muted">and {list.length - 8} more this month</p>}
     </Card>
   );
 }

@@ -14,7 +14,15 @@ export const NOTIFY_JOBS = {
   ATTENDANCE_REMINDER: 'attendance-reminder',
   WEEKEND_STATS: 'weekend-stats',
   TEST: 'test',
+  BIRTHDAYS: 'birthdays',
+  /** A Super Admin asked specific basontas to record attendance. */
+  REMIND_GROUPS: 'remind-groups',
 } as const;
+export interface RemindGroupsJob {
+  date: string;
+  groupIds: string[];
+  requestedBy: string;
+}
 export interface NotifyTestJob {
   userId: string;
 }
