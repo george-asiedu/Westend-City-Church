@@ -93,7 +93,7 @@ export default function ImportMembersPage() {
   const [unknown, setUnknown] = useState<string[]>([]);
   const [check, setCheck] = useState<Result | null>(null);
   const run = useMutation({
-    mutationFn: (dryRun: boolean) => api<Result>('/members/import', { method: 'POST', body: { rows, dryRun } }),
+    mutationFn: (v: { rows: Row[]; dryRun: boolean }) => api<Result>('/members/import', { method: 'POST', body: v }),
     onSuccess: (r) => {
       if (r.dryRun) return setCheck(r);
       toast.success(`Added ${r.summary.create} member${r.summary.create === 1 ? '' : 's'}`);
@@ -116,7 +116,7 @@ export default function ImportMembersPage() {
       setFile(f.name);
       setRows(parsed.rows);
       setUnknown(parsed.unknown);
-      run.mutate(true);
+      run.mutate({ rows: parsed.rows, dryRun: true });
     } catch (e) {
       setFile(null);
       setRows([]);
@@ -154,7 +154,7 @@ export default function ImportMembersPage() {
           {unknown.length > 0 && <p className="text-xs text-muted">Ignored columns: {unknown.join(', ')}</p>}
         </Card>
 
-        {run.isPending && run.variables && <PageLoader />}
+        {run.isPending && run.variables?.dryRun && <PageLoader />}
         {check && (
           <Card className="space-y-3 p-4" data-import-check>
             <div className="flex flex-wrap items-center gap-2">
@@ -187,7 +187,7 @@ export default function ImportMembersPage() {
                 <p className="text-xs text-muted">Rows with problems are skipped. Fix them in the file and import it again (members already added are skipped as duplicates).</p>
               </>
             )}
-            <Button loading={run.isPending && run.variables === false} disabled={!check.summary.create} onClick={() => run.mutate(false)}>
+            <Button loading={run.isPending && run.variables?.dryRun === false} disabled={!check.summary.create} onClick={() => run.mutate({ rows, dryRun: false })}>
               Add {check.summary.create} member{check.summary.create === 1 ? '' : 's'}
             </Button>
           </Card>

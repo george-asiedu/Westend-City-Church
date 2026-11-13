@@ -88,6 +88,7 @@ model User {
   eventsCreated     Event[]              @relation("EventCreatedBy")
   mediaUploaded     MediaAsset[]         @relation("MediaUploadedBy")
   invitationsSent   Invitation[]         @relation("InvitedBy")
+  joinLinks         JoinLink[]
   auditLogs         AuditLog[]
   passwordResets    PasswordResetToken[]
   emailChanges      EmailChangeToken[]
@@ -138,20 +139,25 @@ model Session {
 }
 
 model Invitation {
-  id          String    @id @default(uuid()) @db.Uuid
-  email       String    @db.Citext
-  role        Role
-  categoryIds String[]  @db.Uuid
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @db.Citext
+  role          Role
+  categoryIds   String[]  @db.Uuid
   /// Member accounts: the member record this invitation is for.
-  memberId    String?   @db.Uuid
-  member      Member?   @relation("MemberInvite", fields: [memberId], references: [id], onDelete: Cascade)
-  tokenHash   String    @unique
-  invitedById String    @db.Uuid
-  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
-  expiresAt   DateTime
-  acceptedAt  DateTime?
-  revokedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  memberId      String?   @db.Uuid
+  member        Member?   @relation("MemberInvite", fields: [memberId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  invitedById   String    @db.Uuid
+  invitedBy     User      @relation("InvitedBy", fields: [invitedById], references: [id])
+  /// Asked for through a QR join link.
+  joinLinkId    String?   @db.Uuid
+  joinLink      JoinLink? @relation(fields: [joinLinkId], references: [id], onDelete: SetNull)
+  /// Pastor/shepherd requests from a join link wait for a Super Admin before the email goes out.
+  needsApproval Boolean   @default(false)
+  expiresAt     DateTime
+  acceptedAt    DateTime?
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
 
   @@index([email])
 }
@@ -523,6 +529,10 @@ model Member {
   guestsBrought Guest[]            @relation("GuestBroughtBy")
   convertedFrom Guest?             @relation("GuestConverted")
   account       User?              @relation("MemberAccount")
+  /// Checks in with this person (children, members without a phone).
+  guardianId    String?            @db.Uuid
+  guardian      Member?            @relation("Household", fields: [guardianId], references: [id], onDelete: SetNull)
+  dependants    Member[]           @relation("Household")
   invitations   Invitation[]       @relation("MemberInvite")
   followUps     FollowUp[]
   rosterSlots   RosterSlot[]
@@ -589,6 +599,9 @@ model AttendanceSession {
   headcount       Int?
   newConvertCount Int            @default(0)
   notes           String?        @db.VarChar(1000)
+  /// Self check-in (church services): the code in the QR, valid until checkinUntil.
+  checkinCode     String?        @unique @db.VarChar(40)
+  checkinUntil    DateTime?
   recordedById    String?        @db.Uuid
   recordedBy      User?          @relation("AttendanceRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
   createdAt       DateTime       @default(now())
@@ -609,6 +622,10 @@ model AttendanceRecord {
   member       Member            @relation(fields: [memberId], references: [id], onDelete: Cascade)
   /// People this member brought: null = not recorded, 0 = brought nobody.
   broughtCount Int?
+  /// How it was recorded: null = on the sheet, SELF = scanned the QR code, FAMILY = checked in by
+  /// their guardian, PHONE = typed their phone number at the QR code.
+  via          String?           @db.VarChar(10)
+  checkedInAt  DateTime?
 
   @@id([sessionId, memberId])
   @@index([memberId])
@@ -642,6 +659,8 @@ model Guest {
   fullName          String?            @db.VarChar(120)
   phone             String?            @db.VarChar(30)
   intent            GuestIntent        @default(VISIT)
+  /// Self check-in: who they are to the member (child, relative, friend).
+  relation          String?            @db.VarChar(40)
   convertedMemberId String?            @unique @db.Uuid
   convertedMember   Member?            @relation("GuestConverted", fields: [convertedMemberId], references: [id], onDelete: SetNull)
   createdAt         DateTime           @default(now())
@@ -841,4 +860,21 @@ model AnnouncementRead {
   readAt         DateTime     @default(now())
 
   @@id([announcementId, userId])
+}
+
+/// A QR code anyone can scan to ask for an account with this role (never Super Admin).
+model JoinLink {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique @db.VarChar(40)
+  label       String       @db.VarChar(80)
+  role        Role
+  categoryIds String[]     @db.Uuid
+  maxUses     Int?
+  uses        Int          @default(0)
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdById String       @db.Uuid
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  createdAt   DateTime     @default(now())
+  invitations Invitation[]
 }

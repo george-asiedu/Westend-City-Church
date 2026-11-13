@@ -366,6 +366,32 @@ export class ChurchService {
     } else if (!own && !this.policy.canViewMembership(user)) throw forbidden();
   }
 
+  // ================================================================ households (check-in)
+
+  async household(user: AuthUser, memberId: string) {
+    await this.memberAccess(user, memberId, false);
+    const m = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { guardian: { select: { id: true, fullName: true, phone: true } }, dependants: { select: { id: true, fullName: true, phone: true }, orderBy: { fullName: 'asc' } } },
+    });
+    if (!m) throw notFound('Member');
+    return { guardian: m.guardian, dependants: m.dependants };
+  }
+
+  /** "Checks in with": a parent/relative who checks this member in at the QR code. */
+  async setGuardian(user: AuthUser, memberId: string, guardianId: string | null, meta: ReqMeta) {
+    await this.memberAccess(user, memberId, true);
+    if (guardianId) {
+      if (guardianId === memberId) throw badRequest('GUARDIAN', 'Someone can’t check themselves in');
+      const g = await this.prisma.member.findUnique({ where: { id: guardianId }, select: { guardianId: true, isActive: true } });
+      if (!g?.isActive) throw badRequest('GUARDIAN', 'Choose an active member');
+      if (g.guardianId === memberId) throw badRequest('GUARDIAN', 'They already check in with this member');
+    }
+    await this.prisma.member.update({ where: { id: memberId }, data: { guardianId } });
+    await this.audit.record({ actorId: user.id, action: 'MEMBER_GUARDIAN_SET', entityType: 'MEMBER', entityId: memberId, metadata: { guardianId }, meta });
+    return this.household(user, memberId);
+  }
+
   async milestones(user: AuthUser, memberId: string): Promise<MilestoneDto[]> {
     await this.memberAccess(user, memberId, false);
     const rows = await this.prisma.milestone.findMany({ where: { memberId }, orderBy: { date: 'desc' } });

@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ArrayMaxSize, IsArray, IsEmail, IsEnum, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { Role } from '@wcc/db';
 import { CurrentUser, Meta, Public, ReqMeta, SkipCsrfToken } from '../common/decorators';
@@ -22,6 +22,51 @@ class AcceptInvitationDto {
   @IsOptional() @IsString() @MaxLength(40) title?: string;
   @IsOptional() @IsString() @MaxLength(30) phone?: string;
   @IsString() @MaxLength(200) password!: string;
+}
+
+class JoinLinkDto {
+  @IsString() @MinLength(2) @MaxLength(80) label!: string;
+  @IsEnum(Role) role!: Role;
+  @IsOptional() @IsArray() @ArrayMaxSize(50) @IsUUID('4', { each: true }) categoryIds?: string[];
+  @IsOptional() @IsInt() @Min(1) @Max(5000) maxUses?: number | null;
+  @IsOptional() @IsInt() @Min(1) @Max(365) expiresInDays?: number | null;
+}
+class JoinRequestDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+  @IsOptional() @IsString() @MaxLength(120) fullName?: string;
+}
+
+@Controller()
+export class JoinLinksController {
+  constructor(private readonly invitations: InvitationsService) {}
+
+  @Post('join-links') create(@CurrentUser() u: AuthUser, @Body() d: JoinLinkDto, @Meta() m: ReqMeta) {
+    return this.invitations.createJoinLink(u, d, m);
+  }
+  @Get('join-links') list(@CurrentUser() u: AuthUser) {
+    return this.invitations.listJoinLinks(u);
+  }
+  @Delete('join-links/:id') @HttpCode(204) async revoke(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() m: ReqMeta) {
+    await this.invitations.revokeJoinLink(u, id, m);
+  }
+  @Post('invitations/:id/approve') @HttpCode(204) async approve(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() m: ReqMeta) {
+    await this.invitations.approve(u, id, m);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Get('public/join/:code') info(@Param('code') code: string) {
+    return this.invitations.joinInfo(String(code).slice(0, 40));
+  }
+  @Public()
+  @SkipCsrfToken() // no session yet: Origin check only
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('public/join/:code') request(@Param('code') code: string, @Body() d: JoinRequestDto, @Meta() m: ReqMeta) {
+    return this.invitations.requestJoin(String(code).slice(0, 40), d, m);
+  }
 }
 
 @Controller('invitations')

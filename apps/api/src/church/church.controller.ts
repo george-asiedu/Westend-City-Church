@@ -1,5 +1,5 @@
 import { Throttle } from '@nestjs/throttler';
-import { Body, Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, type PipeTransform, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
 import { AnnouncementAudience, FollowUpStatus, RsvpStatus } from '@wcc/db';
@@ -10,6 +10,7 @@ import { InvitationsService } from '../invitations/invitations.service';
 import { MembershipService } from '../membership/membership.service';
 import { AudienceService } from './audience.service';
 import { ChurchService } from './church.service';
+import { CheckinService, RELATIONS } from './checkin.service';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const nullable = (_: unknown, v: unknown) => v !== null;
@@ -123,6 +124,29 @@ class MyMemberDto {
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(160) email?: string | null;
   @IsOptional() @ValidateIf(nullable) @Matches(DATE) dateOfBirth?: string | null;
 }
+class GuardianDto {
+  @IsOptional() @ValidateIf(nullable) @IsUUID() guardianId?: string | null;
+}
+class OpenCheckinDto {
+  @IsOptional() @IsInt() @Min(1) @Max(12) hours?: number;
+}
+class CompanionDto {
+  @IsString() @MinLength(1) @MaxLength(100) fullName!: string;
+  @IsIn(RELATIONS as unknown as string[]) relation!: string;
+}
+class CheckinDto {
+  @IsOptional() @IsString() @MaxLength(30) phone?: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('4', { each: true }) householdIds?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(15) @ValidateNested({ each: true }) @Type(() => CompanionDto) companions?: CompanionDto[];
+}
+const CODE = /^[A-Za-z0-9_-]{10,40}$/;
+class ParseCodePipe implements PipeTransform<string, string> {
+  transform(v: string) {
+    if (!CODE.test(v)) throw new BadRequestException('Invalid code');
+    return v;
+  }
+}
+const codePipe = new ParseCodePipe();
 const uuid = new ParseUUIDPipe();
 
 @Controller()
@@ -130,7 +154,27 @@ export class ChurchController {
   constructor(
     private readonly svc: ChurchService,
     private readonly invites: InvitationsService,
+    private readonly checkin: CheckinService,
   ) {}
+
+  // self check-in: ushers
+  @Get('attendance/sessions/:id/checkin') checkinStatus(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) { return this.checkin.status(u, id); }
+  @Post('attendance/sessions/:id/checkin') openCheckin(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: OpenCheckinDto, @Meta() m: ReqMeta) { return this.checkin.open(u, id, d.hours ?? 6, m); }
+  @Delete('attendance/sessions/:id/checkin') closeCheckin(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Meta() m: ReqMeta) { return this.checkin.close(u, id, m); }
+
+  // self check-in: signed-in members
+  @Get('checkin/:code') checkinInfo(@CurrentUser() u: AuthUser, @Param('code', codePipe) code: string) { return this.checkin.info(code, u); }
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('checkin/:code') checkIn(@CurrentUser() u: AuthUser, @Param('code', codePipe) code: string, @Body() d: CheckinDto) { return this.checkin.checkIn(code, u, d); }
+
+  // self check-in: anyone at the QR code, by phone number
+  @Public()
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  @Get('public/checkin/:code') publicCheckinInfo(@Param('code', codePipe) code: string) { return this.checkin.info(code, null); }
+  @Public()
+  @SkipCsrfToken() // no session: Origin check only
+  @Throttle({ default: { limit: 60, ttl: 60_000 } }) // many phones share the church Wi-Fi address
+  @Post('public/checkin/:code') publicCheckIn(@Param('code', codePipe) code: string, @Body() d: CheckinDto) { return this.checkin.checkIn(code, null, d); }
 
   // follow-ups
   @Get('follow-ups') followUps(@CurrentUser() u: AuthUser, @Query() q: FollowUpQuery) { return this.svc.followUps(u, q); }
@@ -154,6 +198,10 @@ export class ChurchController {
   @Get('members/:id/milestones') milestones(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) { return this.svc.milestones(u, id); }
   @Post('members/:id/milestones') addMilestone(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: MilestoneDto, @Meta() m: ReqMeta) { return this.svc.addMilestone(u, id, d, m); }
   @Delete('members/:id/milestones/:mid') @HttpCode(204) removeMilestone(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Param('mid', uuid) mid: string, @Meta() m: ReqMeta) { return this.svc.removeMilestone(u, id, mid, m); }
+
+  // households
+  @Get('members/:id/household') household(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) { return this.svc.household(u, id); }
+  @Put('members/:id/guardian') setGuardian(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: GuardianDto, @Meta() m: ReqMeta) { return this.svc.setGuardian(u, id, d.guardianId ?? null, m); }
 
   // member accounts
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
@@ -189,5 +237,5 @@ export class ChurchController {
   visitorCard(@Body() d: VisitorCardDto) { return this.svc.visitorCard(d); }
 }
 
-@Module({ imports: [InvitationsModule], controllers: [ChurchController], providers: [ChurchService, AudienceService, MembershipService], exports: [AudienceService] })
+@Module({ imports: [InvitationsModule], controllers: [ChurchController], providers: [ChurchService, CheckinService, AudienceService, MembershipService], exports: [AudienceService] })
 export class ChurchModule {}

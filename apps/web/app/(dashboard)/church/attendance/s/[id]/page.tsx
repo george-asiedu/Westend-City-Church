@@ -1,5 +1,6 @@
 'use client';
 
+import { SelfCheckinCard } from '@/components/church/self-checkin';
 import { isOffline, queueSave } from '@/lib/offline-queue';
 import { useMe } from '@/lib/queries';
 import { use, useEffect, useMemo, useState } from 'react';
@@ -178,6 +179,11 @@ function ServiceCounts({ sheet: s, onSaved }: { sheet: AttendanceSheetDto; onSav
           <ArrowLeft className="h-4 w-4" /> Attendance
         </Link>
       </PageHeader>
+      {s.canEdit && (
+        <div className="mb-4">
+          <SelfCheckinCard sessionId={info.id} label={`${sessionName(info)} · ${formatDay(info.date)}`} />
+        </div>
+      )}
       {!s.canEdit ? (
         <Card className="max-w-xl space-y-2 p-5 text-sm">
           <p className="flex items-center gap-2 text-muted">
@@ -356,6 +362,8 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
         });
   const save = useMutation({
     mutationFn: (body: ReturnType<typeof sheetBody>) => api<AttendanceSheetDto>(`/attendance/sessions/${id}`, { method: 'PUT', body }),
+    // Try even when offline, so a failed save can be kept on the phone (instead of React Query pausing it).
+    networkMode: 'always',
     onSuccess: (r) => {
       setChanges(new Map());
       refreshAll(r);
@@ -367,8 +375,8 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
       if (!isOffline(e) || !me.data || !s) return toast.error(errorMessage(e));
       queueSave({ userId: me.data.id, path: `/attendance/sessions/${id}`, method: 'PUT', body, label: `${s.session.group?.name ?? s.session.serviceType} ${s.session.date}` });
       setChanges(new Map());
+      // Stay here: other pages may not load without signal.
       toast.success('No signal: saved on this phone. It will be sent automatically when you’re back online.', { duration: 8000 });
-      router.push(s.session.group ? `/church/groups/${s.session.group.id}` : '/church/attendance');
     },
   });
 

@@ -84,7 +84,7 @@ export default function CalendarPage() {
               <Card key={e.id} className="min-w-0 space-y-2 p-4" data-event>
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
-                    <h2 className="break-words font-semibold">{e.title}</h2>
+                    <h2 className="break-words font-semibold normal-case">{e.title}</h2>
                     <p className="text-sm text-muted">{dateRange(e)}</p>
                   </div>
                   {e.group ? <Badge>{e.group.name}</Badge> : <Badge tone="brand">Whole church</Badge>}

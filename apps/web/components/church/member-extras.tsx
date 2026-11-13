@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Award, KeyRound, Plus, Send, X } from 'lucide-react';
+import Link from 'next/link';
+import { Award, KeyRound, Plus, Send, Users, X } from 'lucide-react';
 import { MILESTONE_TYPES, type MilestoneDto } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -138,6 +139,89 @@ export function AppAccessCard({ d }: { d: MemberDetail }) {
             ))}
         </>
       )}
+    </Card>
+  );
+}
+
+interface Household {
+  guardian: { id: string; fullName: string; phone: string | null } | null;
+  dependants: Array<{ id: string; fullName: string; phone: string | null }>;
+}
+
+/** "Checks in with": children and members without a phone are checked in by a parent or relative at the QR code. */
+export function HouseholdCard({ memberId, name, canEdit }: { memberId: string; name: string; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const key = ['household', memberId];
+  const q = useQuery({ queryKey: key, queryFn: () => api<Household>(`/members/${memberId}/household`) });
+  const [picking, setPicking] = useState(false);
+  const [term, setTerm] = useState('');
+  const search = useQuery({
+    queryKey: ['household-search', term],
+    queryFn: () => api<{ items: Array<{ id: string; fullName: string; phone: string | null }> }>('/members', { query: { q: term, limit: 8 } }),
+    enabled: picking && term.trim().length >= 2,
+  });
+  const set = useMutation({
+    mutationFn: (guardianId: string | null) => api<Household>(`/members/${memberId}/guardian`, { method: 'PUT', body: { guardianId } }),
+    onSuccess: (h) => (qc.setQueryData(key, h), setPicking(false), setTerm(''), toast.success('Saved')),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const h = q.data;
+  return (
+    <Card className="space-y-2 p-4" data-household>
+      <h2 className="flex items-center gap-2 font-semibold">
+        <Users className="h-4 w-4" /> Check-in household
+      </h2>
+      <p className="text-xs text-muted">For children and members without a phone: whoever they come with checks them in at the service QR code.</p>
+      <div className="text-sm">
+        <span className="text-muted">Checks in with: </span>
+        {h?.guardian ? (
+          <>
+            <Link className="font-medium text-brand hover:underline" href={`/church/members/${h.guardian.id}`}>
+              {h.guardian.fullName}
+            </Link>
+            {canEdit && (
+              <button className="ml-2 text-xs text-muted hover:text-danger" onClick={() => set.mutate(null)}>
+                Remove
+              </button>
+            )}
+          </>
+        ) : (
+          <span>themselves</span>
+        )}
+      </div>
+      {!!h?.dependants.length && (
+        <p className="text-sm">
+          <span className="text-muted">Checks in: </span>
+          {h.dependants.map((d, i) => (
+            <span key={d.id}>
+              {i > 0 && ', '}
+              <Link className="text-brand hover:underline" href={`/church/members/${d.id}`}>
+                {d.fullName}
+              </Link>
+            </span>
+          ))}
+        </p>
+      )}
+      {canEdit &&
+        (picking ? (
+          <div className="space-y-1">
+            <Input autoFocus placeholder={`Who does ${name.split(' ')[0]} come with? Search…`} value={term} onChange={(e) => setTerm(e.target.value)} />
+            {(search.data?.items ?? [])
+              .filter((m) => m.id !== memberId)
+              .map((m) => (
+                <button key={m.id} className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-surface-2" onClick={() => set.mutate(m.id)}>
+                  {m.fullName} <span className="text-muted">{m.phone ?? ''}</span>
+                </button>
+              ))}
+            <Button size="sm" variant="ghost" onClick={() => setPicking(false)}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => setPicking(true)}>
+            {h?.guardian ? 'Change' : 'Set who they come with'}
+          </Button>
+        ))}
     </Card>
   );
 }

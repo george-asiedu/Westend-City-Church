@@ -29,6 +29,7 @@ import {
   HeartHandshake,
   Megaphone,
   UserRound,
+  QrCode,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
@@ -127,6 +128,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ) : null;
   const admin = [
     ...(p.isAdmin ? [{ href: '/admin/users', label: 'Users', icon: Users }] : []),
+    ...(p.isAdmin ? [{ href: '/admin/join-links', label: 'QR invites', icon: QrCode }] : []),
     ...(p.canViewAudit ? [{ href: '/admin/audit', label: 'Audit log', icon: ScrollText }] : []),
     ...(p.canManageCategories ? [{ href: '/admin/categories', label: 'Categories', icon: Settings2 }] : []),
     ...(p.isAdmin ? [{ href: '/admin/storage', label: 'Storage', icon: BarChart3 }] : []),

@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
 import { FollowUpButton } from '@/components/church/follow-up';
-import { AppAccessCard, MilestonesCard } from '@/components/church/member-extras';
+import { AppAccessCard, HouseholdCard, MilestonesCard } from '@/components/church/member-extras';
 import { useMe } from '@/lib/queries';
 import { canAddMembers } from '@/lib/membership';
 import { api, errorMessage } from '@/lib/api';
@@ -144,6 +144,7 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
         </Card>
         <MilestonesCard memberId={d.id} canEdit={d.canEdit} />
         <AppAccessCard d={d} />
+        <HouseholdCard memberId={d.id} name={d.fullName} canEdit={d.canEdit} />
         <Card className="p-4 lg:col-span-2">
           <h2 className="mb-2 font-semibold">People {d.fullName.split(' ')[0]} brought ({d.brought.length})</h2>
           {d.brought.length ? (

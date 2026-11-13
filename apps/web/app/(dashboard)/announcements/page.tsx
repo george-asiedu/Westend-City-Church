@@ -76,7 +76,7 @@ export default function AnnouncementsPage() {
               <Card key={a.id} className={cn('space-y-2 p-4', a.pinned && 'border-brand/40')} data-announcement>
                 <div className="flex flex-wrap items-center gap-2">
                   {a.pinned && <Pin className="h-4 w-4 text-brand" aria-label="Pinned" />}
-                  <h2 className="mr-auto min-w-0 break-words font-semibold">{a.title}</h2>
+                  <h2 className="mr-auto min-w-0 break-words font-semibold normal-case">{a.title}</h2>
                   {tab === 'feed' && !a.read && <Badge tone="brand">New</Badge>}
                   {scheduled && <Badge tone="warning">Scheduled {when(a.publishAt)}</Badge>}
                   {expired && <Badge>Ended</Badge>}

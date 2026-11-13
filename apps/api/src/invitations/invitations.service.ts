@@ -84,7 +84,17 @@ export class InvitationsService {
     return this.prisma.invitation.findMany({
       where: { acceptedAt: null, revokedAt: null },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, email: true, role: true, categoryIds: true, expiresAt: true, createdAt: true, invitedBy: { select: { id: true, fullName: true } } },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        categoryIds: true,
+        expiresAt: true,
+        createdAt: true,
+        needsApproval: true,
+        invitedBy: { select: { id: true, fullName: true } },
+        joinLink: { select: { id: true, label: true } },
+      },
     });
   }
 
@@ -109,9 +119,132 @@ export class InvitationsService {
     await this.audit.record({ actorId: user.id, action: 'INVITATION_RESENT', entityType: 'INVITATION', entityId: id, meta });
   }
 
+  /** A pastor/shepherd who asked through a join link: approve, and the invitation email goes out. */
+  async approve(user: AuthUser, id: string, meta: ReqMeta): Promise<void> {
+    const inv = await this.loadManageable(user, id);
+    if (!inv.needsApproval) throw badRequest('NOT_PENDING', 'This invitation doesn’t need approval');
+    await this.prisma.invitation.update({ where: { id }, data: { needsApproval: false } });
+    await this.resend(user, id, meta);
+    await this.audit.record({ actorId: user.id, action: 'JOIN_REQUEST_APPROVED', entityType: 'INVITATION', entityId: id, meta });
+  }
+
+  // ------------------------------------------------------------ QR join links
+
+  private joinDto(l: { id: string; code: string; label: string; role: Role; maxUses: number | null; uses: number; expiresAt: Date | null; revokedAt: Date | null; createdAt: Date; createdBy?: { fullName: string } | null }) {
+    return {
+      id: l.id,
+      code: l.code,
+      label: l.label,
+      role: l.role,
+      maxUses: l.maxUses,
+      uses: l.uses,
+      expiresAt: l.expiresAt?.toISOString() ?? null,
+      active: !l.revokedAt && (!l.expiresAt || l.expiresAt > new Date()) && (l.maxUses === null || l.uses < l.maxUses),
+      createdAt: l.createdAt.toISOString(),
+      createdBy: l.createdBy?.fullName ?? null,
+      url: `${this.env.WEB_ORIGIN}/join/${l.code}`,
+    };
+  }
+
+  async createJoinLink(user: AuthUser, dto: { label: string; role: Role; categoryIds?: string[]; maxUses?: number | null; expiresInDays?: number | null }, meta: ReqMeta) {
+    if (dto.role === 'SUPER_ADMIN') throw badRequest('ROLE', 'Super Admins are invited one at a time from the app');
+    if (!this.policy.canInvite(user, dto.role)) throw forbidden('You cannot invite users with that role');
+    const categoryIds = [...new Set(dto.categoryIds ?? [])];
+    if (categoryIds.length && (await this.prisma.category.count({ where: { id: { in: categoryIds } } })) !== categoryIds.length) throw badRequest('BAD_CATEGORY', 'Unknown category');
+    const l = await this.prisma.joinLink.create({
+      data: {
+        code: randomToken().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24),
+        label: dto.label.trim(),
+        role: dto.role,
+        categoryIds,
+        maxUses: dto.maxUses ?? null,
+        expiresAt: dto.expiresInDays ? new Date(Date.now() + dto.expiresInDays * 86_400_000) : null,
+        createdById: user.id,
+      },
+      include: { createdBy: { select: { fullName: true } } },
+    });
+    await this.audit.record({ actorId: user.id, action: 'JOIN_LINK_CREATED', entityType: 'INVITATION', entityId: l.id, metadata: { role: l.role, label: l.label }, meta });
+    return this.joinDto(l);
+  }
+
+  async listJoinLinks(user: AuthUser) {
+    if (!this.policy.canListUsers(user)) throw forbidden();
+    const rows = await this.prisma.joinLink.findMany({ orderBy: { createdAt: 'desc' }, include: { createdBy: { select: { fullName: true } } }, take: 100 });
+    return rows.map((l) => this.joinDto(l));
+  }
+
+  async revokeJoinLink(user: AuthUser, id: string, meta: ReqMeta) {
+    const l = await this.prisma.joinLink.findUnique({ where: { id } });
+    if (!l) throw notFound('Link');
+    if (!this.policy.canInvite(user, l.role)) throw forbidden();
+    await this.prisma.joinLink.update({ where: { id }, data: { revokedAt: new Date() } });
+    await this.audit.record({ actorId: user.id, action: 'JOIN_LINK_REVOKED', entityType: 'INVITATION', entityId: id, meta });
+  }
+
+  private async liveJoinLink(code: string) {
+    const l = await this.prisma.joinLink.findUnique({ where: { code } });
+    const ok = l && !l.revokedAt && (!l.expiresAt || l.expiresAt > new Date()) && (l.maxUses === null || l.uses < l.maxUses);
+    if (!ok) throw badRequest('JOIN_LINK_INVALID', 'This QR code has expired. Ask the church office for a new one.');
+    return l!;
+  }
+
+  async joinInfo(code: string) {
+    const l = await this.liveJoinLink(code);
+    return { label: l.label, role: l.role, roleLabel: ROLE_LABELS[l.role], needsApproval: l.role !== 'VIEWER' };
+  }
+
+  /**
+   * Someone scanned a join QR code and gave their email. We email them the usual invitation
+   * link (which proves the address is theirs). Pastor/shepherd requests wait for a Super Admin.
+   * The reply is the same whether or not the email already has an account.
+   */
+  async requestJoin(code: string, dto: { email: string; fullName?: string }, meta: ReqMeta) {
+    const l = await this.liveJoinLink(code);
+    const email = dto.email.trim().toLowerCase();
+    const needsApproval = l.role !== 'VIEWER';
+    const result = { needsApproval };
+    if (await this.prisma.user.findUnique({ where: { email }, select: { id: true } })) return result;
+    // Asking again re-sends instead of piling up invitations.
+    const pending = await this.prisma.invitation.findFirst({ where: { email, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } } });
+    if (pending) {
+      // Re-send the existing invitation (at most once a minute) instead of making another.
+      if (!pending.needsApproval && pending.expiresAt.getTime() < Date.now() + TTL_MS - 60_000) {
+        const token = randomToken();
+        await this.prisma.invitation.update({ where: { id: pending.id }, data: { tokenHash: sha256(token), expiresAt: new Date(Date.now() + TTL_MS) } });
+        await this.send(email, pending.role, token, 'Westend City Church');
+      }
+      return { needsApproval: pending.needsApproval };
+    }
+    const member = await this.prisma.member.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, account: null }, select: { id: true } });
+    const token = randomToken();
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const used = await tx.joinLink.updateMany({ where: { id: l.id, OR: [{ maxUses: null }, { uses: { lt: l.maxUses ?? 0 } }] }, data: { uses: { increment: 1 } } });
+      if (!used.count) return false;
+      await tx.invitation.updateMany({ where: { email, acceptedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
+      const inv = await tx.invitation.create({
+        data: {
+          email,
+          role: l.role,
+          categoryIds: l.categoryIds,
+          memberId: member?.id ?? null,
+          tokenHash: sha256(token),
+          invitedById: l.createdById,
+          joinLinkId: l.id,
+          needsApproval,
+          expiresAt: new Date(Date.now() + (needsApproval ? 14 * 86_400_000 : TTL_MS)),
+        },
+      });
+      await this.audit.record({ actorId: null, action: 'JOIN_REQUESTED', entityType: 'INVITATION', entityId: inv.id, metadata: { email, role: l.role, link: l.label, name: dto.fullName ?? null }, meta }, tx);
+      return true;
+    });
+    if (!claimed) throw badRequest('JOIN_LINK_INVALID', 'This QR code has been used up. Ask the church office for a new one.');
+    if (!needsApproval) await this.send(email, l.role, token, 'Westend City Church');
+    return result;
+  }
+
   private async findValid(token: string) {
     const inv = await this.prisma.invitation.findUnique({ where: { tokenHash: sha256(token) } });
-    if (!inv || inv.acceptedAt || inv.revokedAt || inv.expiresAt < new Date())
+    if (!inv || inv.acceptedAt || inv.revokedAt || inv.needsApproval || inv.expiresAt < new Date())
       throw badRequest('INVITE_INVALID', 'This invitation is invalid or has expired. Ask an admin to resend it.');
     return inv;
   }
