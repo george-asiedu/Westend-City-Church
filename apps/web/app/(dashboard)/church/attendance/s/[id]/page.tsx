@@ -160,15 +160,22 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
   const saved = useMemo(() => new Set(s?.presentIds ?? []), [s]);
   const isPresent = (mid: string) => changes.get(mid) ?? saved.has(mid);
   const changed = [...changes.entries()].filter(([mid, v]) => v !== saved.has(mid)).map(([mid]) => mid);
-  const metaChanged =
-    !!s &&
-    (Number(meta.visitors || 0) !== s.session.visitorCount ||
-      Number(meta.firstTimers || 0) !== s.session.firstTimerCount ||
-      meta.notes !== (s.session.notes ?? '') ||
-      meta.serviceType.trim() !== s.session.serviceType ||
-      meta.title.trim() !== (s.session.title ?? '') ||
-      meta.date !== s.session.date);
-  const dirty = changed.length > 0 || metaChanged;
+  // Which details differ from what's saved (named in the save bar).
+  const changedFields = !s
+    ? []
+    : [
+        Number(meta.visitors || 0) !== s.session.visitorCount && 'visitors',
+        Number(meta.firstTimers || 0) !== s.session.firstTimerCount && 'first-timers',
+        meta.notes.trim() !== (s.session.notes ?? '') && 'notes',
+        meta.serviceType.trim() !== s.session.serviceType && 'service',
+        meta.title.trim() !== (s.session.title ?? '') && 'title',
+        meta.date !== s.session.date && 'date',
+      ].filter((x): x is string => !!x);
+  const dirty = changed.length > 0 || changedFields.length > 0;
+  const unsavedText = [
+    ...(changed.length ? [`${changed.length} attendance tick${changed.length === 1 ? '' : 's'}`] : []),
+    ...changedFields,
+  ];
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -412,8 +419,8 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
 
       {s.canEdit && (
         <Card className="mt-4 p-4">
-          <Field label="Notes" htmlFor="sh-notes">
-            <Textarea id="sh-notes" maxLength={1000} value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} className="min-h-16" placeholder="Optional" />
+          <Field label="Notes (optional)" htmlFor="sh-notes" hint="Leave blank if there’s nothing to add.">
+            <Textarea id="sh-notes" maxLength={1000} value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} className="min-h-16" placeholder="e.g. Rain kept numbers down" />
           </Field>
         </Card>
       )}
@@ -447,7 +454,9 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
       {s.canEdit && (
         <div className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom))] z-20 border-t border-border bg-surface/95 px-4 py-3 backdrop-blur lg:bottom-0">
           <div className="mx-auto flex max-w-[1600px] items-center gap-3 lg:pl-64">
-            <p className="min-w-0 flex-1 truncate text-sm text-muted">{dirty ? `${changed.length || ''} ${changed.length ? (changed.length === 1 ? 'change' : 'changes') : 'Details changed'} not saved` : 'All changes saved'}</p>
+            <p className="min-w-0 flex-1 truncate text-sm text-muted">
+              {dirty ? `Not saved yet: ${unsavedText.join(', ')}` : 'All changes saved'}
+            </p>
             <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>
               Save attendance
             </Button>
