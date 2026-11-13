@@ -3,7 +3,7 @@ import { Prisma } from '@wcc/db';
 import { PrismaService } from '../prisma/prisma.service';
 import type { ReqMeta } from '../common/decorators';
 
-export type EntityType = 'USER' | 'EVENT' | 'MEDIA' | 'CATEGORY' | 'SESSION' | 'INVITATION' | 'SHARE_LINK' | 'EXPORT' | 'SETTINGS';
+export type EntityType = 'USER' | 'EVENT' | 'MEDIA' | 'CATEGORY' | 'SESSION' | 'INVITATION' | 'SHARE_LINK' | 'EXPORT' | 'SETTINGS' | 'GROUP' | 'MEMBER' | 'ATTENDANCE';
 
 export interface AuditEntry {
   actorId?: string | null;

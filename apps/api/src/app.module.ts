@@ -29,6 +29,7 @@ import { SharesModule } from './shares/shares.module';
 import { ExportsModule } from './exports/exports.module';
 import { HighlightsModule } from './highlights/highlights.module';
 import { StatsModule } from './stats/stats.module';
+import { MembershipModule } from './membership/membership.controller';
 import { CsrfGuard, JwtAuthGuard, RolesGuard } from './common/guards';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
@@ -82,6 +83,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
     SharesModule,
     ExportsModule,
     HighlightsModule,
+    MembershipModule,
     StatsModule,
   ],
   providers: [

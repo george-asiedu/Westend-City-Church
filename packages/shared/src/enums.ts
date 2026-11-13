@@ -50,8 +50,30 @@ export const ROLE_LABELS: Record<Role, string> = {
 /** Permissions a Super Admin can grant to other roles (Super Admin always has them). */
 export const ROLE_PERMISSIONS = {
   MANAGE_CATEGORIES: 'MANAGE_CATEGORIES',
+  VIEW_MEMBERSHIP: 'VIEW_MEMBERSHIP',
+  MANAGE_MEMBERSHIP: 'MANAGE_MEMBERSHIP',
 } as const;
 export type RolePermissionKey = (typeof ROLE_PERMISSIONS)[keyof typeof ROLE_PERMISSIONS];
 export const ROLE_PERMISSION_LABELS: Record<RolePermissionKey, string> = {
   MANAGE_CATEGORIES: 'Add, edit and delete folders',
+  VIEW_MEMBERSHIP: 'View members, groups and attendance',
+  MANAGE_MEMBERSHIP: 'Manage all members, groups and attendance',
 };
+
+export const GROUP_TYPE_LABELS = { CONSTITUENCY: 'Constituency', BASONTA: 'Basonta' } as const;
+export type GroupType = keyof typeof GROUP_TYPE_LABELS;
+/** Suggestions only; any text is allowed. */
+export const CHURCH_ROLE_SUGGESTIONS = [
+  'Member',
+  'New convert',
+  'Bacenta leader',
+  'Shepherd',
+  'Constituency overseer',
+  'Basonta leader',
+  'Usher',
+  'Choir',
+  'Dancer',
+  'Media',
+  'Protocol',
+  'Pastor',
+];

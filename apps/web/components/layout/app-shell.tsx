@@ -22,6 +22,9 @@ import {
   Trash2,
   User,
   Users,
+  Church as ChurchIcon,
+  ClipboardCheck,
+  Contact,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
@@ -85,6 +88,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: '/downloads', label: 'Downloads', icon: Download },
     ...(user.role !== 'VIEWER' ? [{ href: '/trash', label: 'Trash', icon: Trash2 }] : []),
   ];
+  const church = p.canViewMembership
+    ? [
+        { href: '/church/attendance', label: 'Attendance', icon: ClipboardCheck },
+        { href: '/church/members', label: 'Members', icon: Contact },
+        { href: '/church/groups', label: 'Groups', icon: ChurchIcon },
+      ]
+    : [];
+  // Phone bar: one "Church" tab instead of three (the Church pages have their own tabs).
+  const mobileNav = p.canViewMembership
+    ? [...nav.filter((n) => n.href !== '/downloads'), { href: '/church', label: 'Church', icon: ChurchIcon }]
+    : nav;
   const admin = [
     ...(p.isAdmin ? [{ href: '/admin/users', label: 'Users', icon: Users }] : []),
     ...(p.canViewAudit ? [{ href: '/admin/audit', label: 'Audit log', icon: ScrollText }] : []),
@@ -140,6 +154,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <MenuItem onSelect={() => router.push('/account')}>
                   <User className="h-4 w-4" /> Account & security
                 </MenuItem>
+                {p.canViewMembership && (
+                  <MenuItem onSelect={() => router.push('/downloads')}>
+                    <Download className="h-4 w-4" /> Downloads
+                  </MenuItem>
+                )}
                 <MenuItem onSelect={() => router.push('/shares')}>
                   <Link2 className="h-4 w-4" /> Share links
                 </MenuItem>
@@ -176,6 +195,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link href="/shares" className={cn('flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-surface-2', active('/shares') && 'bg-surface-2 font-medium')}>
               <Link2 className="h-4 w-4" /> Share links
             </Link>
+            {church.length > 0 && <p className="px-3 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-muted">Church</p>}
+            {church.map((n) => (
+              <Link key={n.href} href={n.href} className={cn('flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-surface-2', active(n.href) && 'bg-surface-2 font-medium')}>
+                <n.icon className="h-4 w-4" /> {n.label}
+              </Link>
+            ))}
             <p className="px-3 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-muted">Folders</p>
             {categories.data?.filter((c) => c.isActive).map((c) => (
               <Link
@@ -208,8 +233,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Mobile bottom navigation: pastors mostly use phones (§11.2). */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur safe-bottom lg:hidden">
-        <div className="mx-auto grid max-w-md" style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}>
-          {nav.map((n) => (
+        <div className="mx-auto grid max-w-md" style={{ gridTemplateColumns: `repeat(${mobileNav.length}, minmax(0, 1fr))` }}>
+          {mobileNav.map((n) => (
             <Link key={n.href} href={n.href} className={cn('flex flex-col items-center gap-0.5 py-2 text-[11px]', active(n.href) ? 'text-brand' : 'text-muted')}>
               <n.icon className="h-5 w-5" />
               {n.label}

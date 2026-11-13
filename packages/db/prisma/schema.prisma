@@ -88,6 +88,10 @@ model User {
   auditLogs       AuditLog[]
   passwordResets  PasswordResetToken[]
   emailChanges    EmailChangeToken[]
+  pastoredGroups  ChurchGroup[]        @relation("GroupPastor")
+  groupsCreated   ChurchGroup[]        @relation("GroupCreatedBy")
+  membersCreated  Member[]             @relation("MemberCreatedBy")
+  attendanceTaken AttendanceSession[]  @relation("AttendanceRecordedBy")
   recoveryCodes   RecoveryCode[]
   shareLinks      ShareLink[]
   exports         ExportJob[]
@@ -97,19 +101,19 @@ model User {
 }
 
 model Session {
-  id            String    @id @default(uuid()) @db.Uuid
-  userId        String    @db.Uuid
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  familyId      String    @db.Uuid
-  refreshHash   String    @unique
-  userAgent     String?   @db.VarChar(400)
-  ipAddress     String?   @db.Inet
-  expiresAt     DateTime
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId          String    @db.Uuid
+  refreshHash       String    @unique
+  userAgent         String?   @db.VarChar(400)
+  ipAddress         String?   @db.Inet
+  expiresAt         DateTime
   absoluteExpiresAt DateTime
-  lastUsedAt    DateTime  @default(now())
-  revokedAt     DateTime?
-  revokedReason String?   @db.VarChar(60)
-  createdAt     DateTime  @default(now())
+  lastUsedAt        DateTime  @default(now())
+  revokedAt         DateTime?
+  revokedReason     String?   @db.VarChar(60)
+  createdAt         DateTime  @default(now())
 
   @@index([userId])
   @@index([familyId])
@@ -258,12 +262,12 @@ model MediaAsset {
   takenAt     DateTime?
   cameraModel String?   @db.VarChar(120)
 
-  caption    String? @db.VarChar(1000)
-  isFeatured Boolean @default(false)
+  caption           String? @db.VarChar(1000)
+  isFeatured        Boolean @default(false)
   /// Shown on the public highlights gallery. Set only by admins (separate from
   /// isFeatured so featuring inside the app never publishes anything).
   isPublicHighlight Boolean @default(false)
-  sortOrder  Int     @default(0)
+  sortOrder         Int     @default(0)
 
   processingError    String? @db.VarChar(1000)
   processingAttempts Int     @default(0)
@@ -408,4 +412,110 @@ model RolePermission {
   createdAt  DateTime @default(now())
 
   @@id([role, permission])
+}
+
+// ---------------------------------------------------------------- Membership & attendance
+
+enum GroupType {
+  CONSTITUENCY
+  BASONTA
+}
+
+enum AttendanceKind {
+  SUNDAY_SERVICE
+  GROUP_MEETING
+}
+
+/// A constituency (where members belong) or a basonta (ministry). Led by a pastor (an app user).
+model ChurchGroup {
+  id           String    @id @default(uuid()) @db.Uuid
+  type         GroupType
+  name         String    @db.VarChar(80)
+  description  String?   @db.VarChar(500)
+  meetingDay   String?   @db.VarChar(40)
+  meetingPlace String?   @db.VarChar(160)
+  pastorId     String?   @db.Uuid
+  pastor       User?     @relation("GroupPastor", fields: [pastorId], references: [id], onDelete: SetNull)
+  createdById  String?   @db.Uuid
+  createdBy    User?     @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  members  Member[]            @relation("MemberConstituency")
+  basonta  MemberBasonta[]
+  sessions AttendanceSession[]
+
+  @@unique([type, name])
+  @@index([pastorId])
+}
+
+/// A church member (not an app login).
+model Member {
+  id             String       @id @default(uuid()) @db.Uuid
+  fullName       String       @db.VarChar(120)
+  phone          String?      @db.VarChar(30)
+  email          String?      @db.Citext
+  gender         String?      @db.VarChar(10)
+  dateOfBirth    DateTime?    @db.Date
+  location       String?      @db.VarChar(160)
+  churchRole     String       @default("Member") @db.VarChar(60)
+  constituencyId String?      @db.Uuid
+  constituency   ChurchGroup? @relation("MemberConstituency", fields: [constituencyId], references: [id], onDelete: SetNull)
+  joinedOn       DateTime?    @db.Date
+  isActive       Boolean      @default(true)
+  notes          String?      @db.VarChar(1000)
+  createdById    String?      @db.Uuid
+  createdBy      User?        @relation("MemberCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  basontas   MemberBasonta[]
+  attendance AttendanceRecord[]
+
+  @@index([constituencyId])
+  @@index([fullName])
+}
+
+model MemberBasonta {
+  memberId String      @db.Uuid
+  member   Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  groupId  String      @db.Uuid
+  group    ChurchGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, groupId])
+  @@index([groupId])
+}
+
+/// One Sunday service (groupId null) or one group meeting, on a date.
+model AttendanceSession {
+  id              String         @id @default(uuid()) @db.Uuid
+  kind            AttendanceKind
+  groupId         String?        @db.Uuid
+  group           ChurchGroup?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  date            DateTime       @db.Date
+  title           String?        @db.VarChar(120)
+  visitorCount    Int            @default(0)
+  firstTimerCount Int            @default(0)
+  notes           String?        @db.VarChar(1000)
+  recordedById    String?        @db.Uuid
+  recordedBy      User?          @relation("AttendanceRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  records AttendanceRecord[]
+
+  @@index([date])
+  @@index([groupId, date])
+}
+
+/// A member present at a session (absence = no row).
+model AttendanceRecord {
+  sessionId String            @db.Uuid
+  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  memberId  String            @db.Uuid
+  member    Member            @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, memberId])
+  @@index([memberId])
 }

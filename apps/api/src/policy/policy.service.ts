@@ -130,6 +130,44 @@ export class PolicyService {
     return u.role === 'SUPER_ADMIN' || !!u.rolePermissions?.has('MANAGE_CATEGORIES');
   }
 
+  // ---------------------------------------------------------- membership & attendance
+  // Super Admin and pastors by default; other roles only through role permissions.
+
+  /** Full control over every member, group and attendance record. */
+  isMembershipAdmin(u: Principal): boolean {
+    return u.role === 'SUPER_ADMIN' || !!u.rolePermissions?.has('MANAGE_MEMBERSHIP');
+  }
+
+  canViewMembership(u: Principal): boolean {
+    return this.isMembershipAdmin(u) || u.role === 'PASTOR' || !!u.rolePermissions?.has('VIEW_MEMBERSHIP');
+  }
+
+  /** Pastors create their own groups (and lead them); admins create any. */
+  canCreateGroup(u: Principal): boolean {
+    return this.isMembershipAdmin(u) || u.role === 'PASTOR';
+  }
+
+  /** Edit, take attendance for, add members to and delete a group. */
+  canManageGroup(u: Principal, g: { pastorId: string | null; createdById: string | null }): boolean {
+    return this.isMembershipAdmin(u) || (u.role === 'PASTOR' && (g.pastorId === u.id || g.createdById === u.id));
+  }
+
+  /** Choose any user as a group's pastor (pastors can only lead their own). */
+  canAssignPastor(u: Principal): boolean {
+    return this.isMembershipAdmin(u);
+  }
+
+  canRecordSunday(u: Principal): boolean {
+    return this.isMembershipAdmin(u) || u.role === 'PASTOR';
+  }
+
+  /** Pastors edit members of groups they lead, or members they added. */
+  canEditMember(u: Principal, m: { createdById: string | null; groups: Array<{ pastorId: string | null; createdById: string | null }> }): boolean {
+    if (this.isMembershipAdmin(u)) return true;
+    if (u.role !== 'PASTOR') return false;
+    return m.createdById === u.id || m.groups.some((g) => this.canManageGroup(u, g));
+  }
+
   canDeleteUser(u: Principal): boolean {
     return u.role === 'SUPER_ADMIN';
   }

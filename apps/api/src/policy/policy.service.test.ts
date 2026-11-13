@@ -81,3 +81,33 @@ describe('role permissions', () => {
     expect(ROLES.map((r) => p.canManageRolePermissions(withPerm(r)))).toEqual([true, false, false, false, false]);
   });
 });
+
+describe('membership', () => {
+  const perm = (role: Role, ...ps: string[]) => ({ ...user(role), rolePermissions: new Set(ps) });
+  const mine = { pastorId: 'me', createdById: 'x' };
+  const theirs = { pastorId: 'x', createdById: 'x' };
+  it('Super Admin and pastors view; others need a grant', () => {
+    expect(ROLES.map((r) => p.canViewMembership(user(r)))).toEqual([true, false, false, true, false]);
+    expect(p.canViewMembership(perm('VIEWER', 'VIEW_MEMBERSHIP'))).toBe(true);
+  });
+  it('pastors create groups and manage only their own', () => {
+    expect(ROLES.map((r) => p.canCreateGroup(user(r)))).toEqual([true, false, false, true, false]);
+    expect(p.canManageGroup(user('PASTOR'), mine)).toBe(true);
+    expect(p.canManageGroup(user('PASTOR'), theirs)).toBe(false);
+    expect(p.canManageGroup(user('SUPER_ADMIN'), theirs)).toBe(true);
+    expect(p.canManageGroup(user('MEDIA_ADMIN'), theirs)).toBe(false);
+  });
+  it('MANAGE_MEMBERSHIP grant gives full control', () => {
+    const u = perm('MEDIA_TEAM', 'MANAGE_MEMBERSHIP');
+    expect(p.canManageGroup(u, theirs) && p.canAssignPastor(u) && p.canRecordSunday(u) && p.canViewMembership(u)).toBe(true);
+  });
+  it('only admins pick another pastor', () => {
+    expect(p.canAssignPastor(user('PASTOR'))).toBe(false);
+  });
+  it('pastors edit members of their groups or members they added', () => {
+    expect(p.canEditMember(user('PASTOR'), { createdById: 'x', groups: [mine] })).toBe(true);
+    expect(p.canEditMember(user('PASTOR'), { createdById: 'me', groups: [] })).toBe(true);
+    expect(p.canEditMember(user('PASTOR'), { createdById: 'x', groups: [theirs] })).toBe(false);
+    expect(p.canEditMember(user('VIEWER', ), { createdById: 'me', groups: [] })).toBe(false);
+  });
+});
