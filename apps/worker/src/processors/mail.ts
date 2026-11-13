@@ -139,6 +139,15 @@ export function render(job: MailJob): { subject: string; html: string; text: str
         disclaimer: 'If you did not make this change, contact an administrator immediately.',
       };
       break;
+    case 'monthly-report':
+      subject = `${d.month ?? 'Monthly'} church report`;
+      l = {
+        greeting: hello,
+        paragraphs: (d.lines ?? '').split('\n').filter(Boolean),
+        cta: { label: 'Open attendance', href: d.link ?? env.WEB_ORIGIN },
+        note: 'Sent on the 1st of every month to Super Admins.',
+      };
+      break;
     case 'export-ready':
       subject = `Your download is ready: ${d.title ?? ''}`;
       l = {

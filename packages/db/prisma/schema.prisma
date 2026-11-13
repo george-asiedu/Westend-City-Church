@@ -97,6 +97,18 @@ model User {
   attendanceTaken   AttendanceSession[]  @relation("AttendanceRecordedBy")
   shepherding       GroupShepherd[]
   pushSubscriptions PushSubscription[]
+  /// Member accounts: the church member this login belongs to.
+  memberId          String?              @unique @db.Uuid
+  member            Member?              @relation("MemberAccount", fields: [memberId], references: [id], onDelete: SetNull)
+  followUpsAssigned FollowUp[]           @relation("FollowUpAssignee")
+  followUpsCreated  FollowUp[]           @relation("FollowUpCreator")
+  followUpNotes     FollowUpNote[]
+  rosterCreated     RosterSlot[]
+  eventsCreated2    ChurchEvent[]
+  rsvps             EventRsvp[]
+  milestonesAdded   Milestone[]
+  announcements     Announcement[]
+  announcementReads AnnouncementRead[]
   recoveryCodes     RecoveryCode[]
   shareLinks        ShareLink[]
   exports           ExportJob[]
@@ -130,6 +142,9 @@ model Invitation {
   email       String    @db.Citext
   role        Role
   categoryIds String[]  @db.Uuid
+  /// Member accounts: the member record this invitation is for.
+  memberId    String?   @db.Uuid
+  member      Member?   @relation("MemberInvite", fields: [memberId], references: [id], onDelete: Cascade)
   tokenHash   String    @unique
   invitedById String    @db.Uuid
   invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
@@ -469,6 +484,9 @@ model ChurchGroup {
   roles          BacentaRole[]
   sessions       AttendanceSession[]
   shepherds      GroupShepherd[]
+  rosterSlots    RosterSlot[]
+  churchEvents   ChurchEvent[]
+  announcements  AnnouncementGroup[]
 
   @@unique([type, name])
   @@index([pastorId])
@@ -504,6 +522,11 @@ model Member {
   attendance    AttendanceRecord[]
   guestsBrought Guest[]            @relation("GuestBroughtBy")
   convertedFrom Guest?             @relation("GuestConverted")
+  account       User?              @relation("MemberAccount")
+  invitations   Invitation[]       @relation("MemberInvite")
+  followUps     FollowUp[]
+  rosterSlots   RosterSlot[]
+  milestones    Milestone[]
 
   @@index([constituencyId])
   @@index([basontaId])
@@ -524,16 +547,17 @@ model MemberBacenta {
 
 /// A team role defined by a bacenta (e.g. Media: mixing, projecting, live streaming).
 model BacentaRole {
-  id        String              @id @default(uuid()) @db.Uuid
-  groupId   String              @db.Uuid
-  group     ChurchGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  name      String              @db.VarChar(60)
+  id          String              @id @default(uuid()) @db.Uuid
+  groupId     String              @db.Uuid
+  group       ChurchGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name        String              @db.VarChar(60)
   /// Team lead for this role (a member of the bacenta).
-  leadId    String?             @db.Uuid
-  lead      Member?             @relation("TeamLead", fields: [leadId], references: [id], onDelete: SetNull)
-  sortOrder Int                 @default(0)
-  createdAt DateTime            @default(now())
-  members   MemberBacentaRole[]
+  leadId      String?             @db.Uuid
+  lead        Member?             @relation("TeamLead", fields: [leadId], references: [id], onDelete: SetNull)
+  sortOrder   Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  rosterSlots RosterSlot[]
+  members     MemberBacentaRole[]
 
   @@unique([groupId, name])
 }
@@ -604,17 +628,23 @@ model GroupShepherd {
 
 /// Someone a member brought to a service or meeting.
 model Guest {
-  id                String            @id @default(uuid()) @db.Uuid
-  sessionId         String            @db.Uuid
-  session           AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  broughtById       String?           @db.Uuid
-  broughtBy         Member?           @relation("GuestBroughtBy", fields: [broughtById], references: [id], onDelete: SetNull)
-  fullName          String?           @db.VarChar(120)
-  phone             String?           @db.VarChar(30)
-  intent            GuestIntent       @default(VISIT)
-  convertedMemberId String?           @unique @db.Uuid
-  convertedMember   Member?           @relation("GuestConverted", fields: [convertedMemberId], references: [id], onDelete: SetNull)
-  createdAt         DateTime          @default(now())
+  id                String             @id @default(uuid()) @db.Uuid
+  /// Null for visitor cards filled in by the visitor (QR code).
+  sessionId         String?            @db.Uuid
+  session           AttendanceSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// Visitor cards: where they stay, how they heard, prayer request.
+  location          String?            @db.VarChar(160)
+  howHeard          String?            @db.VarChar(160)
+  prayerRequest     String?            @db.VarChar(1000)
+  followUps         FollowUp[]
+  broughtById       String?            @db.Uuid
+  broughtBy         Member?            @relation("GuestBroughtBy", fields: [broughtById], references: [id], onDelete: SetNull)
+  fullName          String?            @db.VarChar(120)
+  phone             String?            @db.VarChar(30)
+  intent            GuestIntent        @default(VISIT)
+  convertedMemberId String?            @unique @db.Uuid
+  convertedMember   Member?            @relation("GuestConverted", fields: [convertedMemberId], references: [id], onDelete: SetNull)
+  createdAt         DateTime           @default(now())
 
   @@index([sessionId])
   @@index([broughtById])
@@ -634,4 +664,181 @@ model PushSubscription {
   lastSuccessAt DateTime?
 
   @@index([userId])
+}
+
+// ---------------------------------------------------------------- follow-ups
+
+enum FollowUpStatus {
+  OPEN
+  CONTACTED
+  VISITED
+  UNREACHABLE
+  DONE
+}
+
+/// Someone to follow up (a new person who wants to join, or a member not seen), assigned to a leader.
+model FollowUp {
+  id           String         @id @default(uuid()) @db.Uuid
+  memberId     String?        @db.Uuid
+  member       Member?        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  guestId      String?        @db.Uuid
+  guest        Guest?         @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  reason       String         @db.VarChar(160)
+  status       FollowUpStatus @default(OPEN)
+  assignedToId String?        @db.Uuid
+  assignedTo   User?          @relation("FollowUpAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdById  String?        @db.Uuid
+  createdBy    User?          @relation("FollowUpCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  dueOn        DateTime?      @db.Date
+  closedAt     DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  notes        FollowUpNote[]
+
+  @@index([assignedToId, status])
+  @@index([status, dueOn])
+}
+
+model FollowUpNote {
+  id         String          @id @default(uuid()) @db.Uuid
+  followUpId String          @db.Uuid
+  followUp   FollowUp        @relation(fields: [followUpId], references: [id], onDelete: Cascade)
+  authorId   String?         @db.Uuid
+  author     User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  status     FollowUpStatus?
+  text       String          @db.VarChar(1000)
+  createdAt  DateTime        @default(now())
+
+  @@index([followUpId])
+}
+
+// ---------------------------------------------------------------- bacenta rosters
+
+/// Who serves in which team on a date (e.g. Media → Live streaming → Sun 16 Nov, 1st service).
+model RosterSlot {
+  id          String       @id @default(uuid()) @db.Uuid
+  groupId     String       @db.Uuid
+  group       ChurchGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  roleId      String?      @db.Uuid
+  role        BacentaRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  date        DateTime     @db.Date
+  service     String?      @db.VarChar(60)
+  memberId    String       @db.Uuid
+  member      Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  note        String?      @db.VarChar(200)
+  createdById String?      @db.Uuid
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+
+  @@index([groupId, date])
+  @@index([memberId, date])
+}
+
+// ---------------------------------------------------------------- events & RSVPs
+
+enum RsvpStatus {
+  GOING
+  MAYBE
+  NOT_GOING
+}
+
+/// A church calendar event (camp, conference, all-night…), church-wide or for one group.
+model ChurchEvent {
+  id          String       @id @default(uuid()) @db.Uuid
+  title       String       @db.VarChar(120)
+  description String?      @db.VarChar(2000)
+  location    String?      @db.VarChar(160)
+  startsAt    DateTime
+  endsAt      DateTime?
+  groupId     String?      @db.Uuid
+  group       ChurchGroup? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  rsvpEnabled Boolean      @default(true)
+  capacity    Int?
+  createdById String?      @db.Uuid
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  rsvps       EventRsvp[]
+
+  @@index([startsAt])
+}
+
+model EventRsvp {
+  eventId   String      @db.Uuid
+  event     ChurchEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String      @db.Uuid
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    RsvpStatus
+  /// Extra people coming with them.
+  guests    Int         @default(0)
+  updatedAt DateTime    @updatedAt
+
+  @@id([eventId, userId])
+}
+
+// ---------------------------------------------------------------- milestones
+
+/// Foundation school, baptism, wedding (anniversary), salvation…
+model Milestone {
+  id          String   @id @default(uuid()) @db.Uuid
+  memberId    String   @db.Uuid
+  member      Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  type        String   @db.VarChar(40)
+  date        DateTime @db.Date
+  note        String?  @db.VarChar(300)
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([memberId])
+  @@index([type])
+}
+
+// ---------------------------------------------------------------- announcements
+
+enum AnnouncementAudience {
+  CHURCH
+  GROUPS
+  LEADERS
+}
+
+model Announcement {
+  id          String               @id @default(uuid()) @db.Uuid
+  title       String               @db.VarChar(120)
+  body        String               @db.VarChar(5000)
+  linkUrl     String?              @db.VarChar(500)
+  audience    AnnouncementAudience @default(CHURCH)
+  pinned      Boolean              @default(false)
+  publishAt   DateTime             @default(now())
+  expiresAt   DateTime?
+  /// Set once the push notification has gone out (scheduled ones are sent by the worker).
+  notifiedAt  DateTime?
+  createdById String?              @db.Uuid
+  createdBy   User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  groups      AnnouncementGroup[]
+  reads       AnnouncementRead[]
+
+  @@index([publishAt])
+}
+
+model AnnouncementGroup {
+  announcementId String       @db.Uuid
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  groupId        String       @db.Uuid
+  group          ChurchGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, groupId])
+  @@index([groupId])
+}
+
+model AnnouncementRead {
+  announcementId String       @db.Uuid
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  userId         String       @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@id([announcementId, userId])
 }

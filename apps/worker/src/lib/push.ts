@@ -7,7 +7,7 @@ import { log } from './log';
 export const pushConfigured = !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY);
 if (pushConfigured) webpush.setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC_KEY!, env.VAPID_PRIVATE_KEY!);
 
-export type PushKind = 'reminder' | 'stats' | 'birthday' | 'test';
+export type PushKind = 'reminder' | 'stats' | 'birthday' | 'announcement' | 'test';
 
 /**
  * Sends one payload to every device of each user (respecting their preferences).

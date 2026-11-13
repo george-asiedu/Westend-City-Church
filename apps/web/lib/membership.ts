@@ -38,6 +38,10 @@ export interface MemberDetail extends MemberDto {
     broughtCount: number | null;
   }>;
   brought: GuestDto[];
+  /** Their app login, if they have one. */
+  account: { status: string; lastLoginAt: string | null; twoFactor: boolean } | null;
+  /** A pending invitation to the app. */
+  invitedAt: string | null;
 }
 export type SessionRow = SessionRowDto;
 export type Summary = AttendanceSummaryDto;

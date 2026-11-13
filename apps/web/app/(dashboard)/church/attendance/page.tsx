@@ -1,5 +1,6 @@
 'use client';
 
+import { FollowUpButton } from '@/components/church/follow-up';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -310,14 +311,14 @@ function PendingGuests() {
       <h2 className="mb-1 flex items-center gap-2 font-semibold">
         <UserPlus className="h-4 w-4 text-muted" /> New people who want to join ({list.total ?? list.items.length})
       </h2>
-      <p className="mb-3 text-xs text-muted">Brought by members and marked “wants to join”. Add them as members of a constituency, a basonta, or both.</p>
+      <p className="mb-3 text-xs text-muted">Brought by members (or from visitor cards) and marked “wants to join”. Add them as members of a constituency, a basonta, or both.</p>
       <ul className="divide-y divide-border">
         {list.items.map((g) => (
           <li key={g.id} className="flex min-w-0 flex-wrap items-center gap-2 py-2.5">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{g.fullName || 'Name not recorded'}</p>
               <p className="truncate text-xs text-muted">
-                {g.broughtBy ? `Brought by ${g.broughtBy.fullName}` : 'Brought by a former member'}
+                {g.fromCard ? 'Filled in a visitor card' : g.broughtBy ? `Brought by ${g.broughtBy.fullName}` : 'Brought by a former member'}
                 {g.session ? ` · ${sessionName(g.session)} · ${formatDay(g.session.date)}` : ''}
               </p>
             </div>
@@ -326,6 +327,7 @@ function PendingGuests() {
                 <Phone className="h-4 w-4" />
               </a>
             )}
+            <FollowUpButton guestId={g.id} name={g.fullName ?? 'this person'} defaultReason="Wants to join: welcome call" />
             <Button size="sm" onClick={() => setGuest(g)}>
               Make member
             </Button>

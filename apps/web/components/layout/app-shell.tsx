@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart3,
   ChevronDown,
@@ -25,6 +25,10 @@ import {
   Church as ChurchIcon,
   ClipboardCheck,
   Contact,
+  CalendarDays,
+  HeartHandshake,
+  Megaphone,
+  UserRound,
 } from 'lucide-react';
 import { ROLE_LABELS } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
@@ -33,7 +37,7 @@ import { PageLoader } from '@/components/ui/misc';
 import { api } from '@/lib/api';
 import { useCategories, useMe } from '@/lib/queries';
 import { cn } from '@/lib/utils';
-import { InstallPrompt, OfflineBanner, installApp } from './pwa';
+import { InstallPrompt, OfflineBanner, OfflineSync, installApp } from './pwa';
 
 function useCdnSession(enabled: boolean) {
   useEffect(() => {
@@ -64,6 +68,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const qc = useQueryClient();
   useCdnSession(!!me.data && !me.data.mustEnable2fa);
+  // Unread announcements badge (cheap: one count, refreshed every few minutes).
+  const unread = useQuery({
+    queryKey: ['announcements', 'unread'],
+    queryFn: () => api<{ unread: number }>('/announcements', { query: { limit: 1 } }).then((r) => r.unread),
+    enabled: !!me.data && !me.data.mustEnable2fa,
+    refetchInterval: 5 * 60_000,
+  });
 
   useEffect(() => {
     if (me.data?.mustEnable2fa && !pathname.startsWith('/account')) router.replace('/account?setup2fa=1');
@@ -88,17 +99,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: '/downloads', label: 'Downloads', icon: Download },
     ...(user.role !== 'VIEWER' ? [{ href: '/trash', label: 'Trash', icon: Trash2 }] : []),
   ];
-  const church = p.canViewMembership
-    ? [
-        { href: '/church/attendance', label: 'Attendance', icon: ClipboardCheck },
-        { href: '/church/members', label: 'Members', icon: Contact },
-        { href: '/church/groups', label: 'Groups', icon: ChurchIcon },
-      ]
-    : [];
+  const leader = p.canManageMembership || user.role === 'PASTOR' || user.role === 'SHEPHERD';
+  const news = { href: '/announcements', label: 'Announcements', icon: Megaphone };
+  const church = [
+    news,
+    { href: '/calendar', label: 'Calendar', icon: CalendarDays },
+    ...(user.memberId ? [{ href: '/me/church', label: 'My church', icon: UserRound }] : []),
+    ...(p.canViewMembership
+      ? [
+          { href: '/church/attendance', label: 'Attendance', icon: ClipboardCheck },
+          { href: '/church/members', label: 'Members', icon: Contact },
+          { href: '/church/groups', label: 'Groups', icon: ChurchIcon },
+        ]
+      : []),
+    ...(leader ? [{ href: '/church/follow-ups', label: 'Follow-ups', icon: HeartHandshake }] : []),
+  ];
   // Phone bar: one "Church" tab instead of three (the Church pages have their own tabs).
+  const mobileNews = { ...news, label: 'News' };
   const mobileNav = p.canViewMembership
-    ? [...nav.filter((n) => n.href !== '/downloads'), { href: '/church', label: 'Church', icon: ChurchIcon }]
-    : nav;
+    ? [...nav.filter((n) => n.href !== '/downloads' && n.href !== '/trash'), mobileNews, { href: '/church', label: 'Church', icon: ChurchIcon }]
+    : [...nav.filter((n) => n.href !== '/downloads' && n.href !== '/trash'), mobileNews, user.memberId ? { href: '/me/church', label: 'My church', icon: UserRound } : { href: '/calendar', label: 'Calendar', icon: CalendarDays }];
+  const badge = (href: string) =>
+    href === '/announcements' && unread.data ? (
+      <span className="ml-auto rounded-full bg-brand px-1.5 text-[10px] font-semibold leading-4 text-white" aria-label={`${unread.data} unread`}>
+        {unread.data > 9 ? '9+' : unread.data}
+      </span>
+    ) : null;
   const admin = [
     ...(p.isAdmin ? [{ href: '/admin/users', label: 'Users', icon: Users }] : []),
     ...(p.canViewAudit ? [{ href: '/admin/audit', label: 'Audit log', icon: ScrollText }] : []),
@@ -110,6 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh">
       <OfflineBanner />
+      <OfflineSync userId={user.id} />
       <header className="sticky top-0 z-30 border-b border-border bg-surface/90 backdrop-blur safe-top">
         <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-3 px-4 lg:px-6 2xl:px-8">
           <Link href="/" className="flex items-center gap-2 font-semibold">
@@ -199,6 +226,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {church.map((n) => (
               <Link key={n.href} href={n.href} className={cn('flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-surface-2', active(n.href) && 'bg-surface-2 font-medium')}>
                 <n.icon className="h-4 w-4" /> {n.label}
+                {badge(n.href)}
               </Link>
             ))}
             <p className="px-3 pb-1 pt-5 text-xs font-semibold uppercase tracking-wide text-muted">Folders</p>
@@ -235,8 +263,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur safe-bottom lg:hidden">
         <div className="mx-auto grid max-w-md" style={{ gridTemplateColumns: `repeat(${mobileNav.length}, minmax(0, 1fr))` }}>
           {mobileNav.map((n) => (
-            <Link key={n.href} href={n.href} className={cn('flex flex-col items-center gap-0.5 py-2 text-[11px]', active(n.href) ? 'text-brand' : 'text-muted')}>
+            <Link key={n.href} href={n.href} className={cn('relative flex flex-col items-center gap-0.5 py-2 text-[11px]', active(n.href) ? 'text-brand' : 'text-muted')}>
               <n.icon className="h-5 w-5" />
+              {n.href === '/announcements' && !!unread.data && <span className="absolute right-[calc(50%-14px)] top-1.5 h-2 w-2 rounded-full bg-brand" aria-label="Unread announcements" />}
               {n.label}
             </Link>
           ))}

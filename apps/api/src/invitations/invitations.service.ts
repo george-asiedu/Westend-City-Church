@@ -33,8 +33,22 @@ export class InvitationsService {
     });
   }
 
-  async create(user: AuthUser, dto: { email: string; role: Role; categoryIds: string[] }, meta: ReqMeta) {
-    if (!this.policy.canInvite(user, dto.role)) throw forbidden('You cannot invite users with that role');
+  /**
+   * Member accounts: a leader invites a church member (who has an email address) to the
+   * app with the Member role. Accepting links the new login to that member record.
+   */
+  async inviteMember(user: AuthUser, memberId: string, meta: ReqMeta) {
+    if (!this.policy.canAddMembers(user)) throw forbidden('Only leaders can invite members to the app');
+    const m = await this.prisma.member.findUnique({ where: { id: memberId }, select: { id: true, fullName: true, email: true, account: { select: { id: true } } } });
+    if (!m) throw badRequest('MEMBER', 'Member not found');
+    if (m.account) throw conflict('HAS_ACCOUNT', `${m.fullName} already has an account`);
+    if (!m.email) throw badRequest('NO_EMAIL', `Add an email address for ${m.fullName} first: invitations are sent by email`);
+    if (await this.prisma.user.findUnique({ where: { email: m.email } })) throw conflict('USER_EXISTS', 'A user with that email already exists');
+    return this.create(user, { email: m.email, role: 'VIEWER', categoryIds: [], memberId: m.id }, meta, true);
+  }
+
+  async create(user: AuthUser, dto: { email: string; role: Role; categoryIds: string[]; memberId?: string }, meta: ReqMeta, memberInvite = false) {
+    if (!memberInvite && !this.policy.canInvite(user, dto.role)) throw forbidden('You cannot invite users with that role');
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw conflict('USER_EXISTS', 'A user with that email already exists');
     if (dto.categoryIds.length) {
@@ -49,6 +63,7 @@ export class InvitationsService {
           email: dto.email,
           role: dto.role,
           categoryIds: [...new Set(dto.categoryIds)],
+          memberId: dto.memberId ?? null,
           tokenHash: sha256(token),
           invitedById: user.id,
           expiresAt: new Date(Date.now() + TTL_MS),
@@ -115,8 +130,15 @@ export class InvitationsService {
       const claimed = await tx.invitation.updateMany({ where: { id: inv.id, acceptedAt: null }, data: { acceptedAt: new Date() } });
       if (claimed.count !== 1) throw badRequest('INVITE_INVALID', 'This invitation was already used');
       if (await tx.user.findUnique({ where: { email: inv.email } })) throw conflict('USER_EXISTS', 'Account already exists. Sign in instead.');
+      // Link to the member record: the one this invite is for, or a member with the same email.
+      const memberId =
+        inv.memberId ??
+        (await tx.member.findFirst({ where: { email: { equals: inv.email, mode: 'insensitive' }, account: null }, select: { id: true } }))?.id ??
+        null;
+      const linkable = memberId && !(await tx.user.findUnique({ where: { memberId }, select: { id: true } })) ? memberId : null;
       const user = await tx.user.create({
         data: {
+          memberId: linkable,
           email: inv.email,
           fullName: dto.fullName.trim(),
           title: dto.title?.trim() || null,

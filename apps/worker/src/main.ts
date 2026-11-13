@@ -57,12 +57,16 @@ async function scheduleNotifications(): Promise<void> {
     ['stats-saturday', NOTIFY_JOBS.WEEKEND_STATS, env.STATS_CRON_SATURDAY],
     ['stats-sunday', NOTIFY_JOBS.WEEKEND_STATS, env.STATS_CRON_SUNDAY],
     ['birthdays-daily', NOTIFY_JOBS.BIRTHDAYS, env.BIRTHDAY_CRON],
+    ['announcements-due', NOTIFY_JOBS.ANNOUNCEMENTS_DUE, env.ANNOUNCEMENTS_CRON],
+    ['roster-reminders', NOTIFY_JOBS.ROSTER_REMINDERS, env.ROSTER_CRON],
   ];
   for (const [id, name, pattern] of plan) {
     if (env.NOTIFICATIONS_ENABLED && pushConfigured)
       await queues.notify.upsertJobScheduler(id, { pattern, tz: env.NOTIFY_TZ }, { name, opts: { removeOnComplete: 50, removeOnFail: 200 } });
     else await queues.notify.removeJobScheduler(id);
   }
+  // The monthly report is emailed, so it runs even without push.
+  await queues.notify.upsertJobScheduler('monthly-report', { pattern: env.MONTHLY_REPORT_CRON, tz: env.NOTIFY_TZ }, { name: NOTIFY_JOBS.MONTHLY_REPORT, opts: { removeOnComplete: 50, removeOnFail: 200 } });
   if (!pushConfigured) log.warn('push notifications off: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY');
 }
 

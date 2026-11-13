@@ -24,7 +24,7 @@ import { Checkbox, Field, Input, Select, Textarea } from '@/components/ui/form';
 import { Card } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
 import { qk, useMe } from '@/lib/queries';
-import { mk, useGroups, usePastors, type MemberDetail } from '@/lib/membership';
+import { canAddMembers, mk, useGroups, usePastors, type MemberDetail } from '@/lib/membership';
 import { cn } from '@/lib/utils';
 
 /** Attendance · Members · Groups */
@@ -35,6 +35,12 @@ export function ChurchTabs() {
     { href: '/church/attendance', label: 'Attendance' },
     { href: '/church/members', label: 'Members' },
     { href: '/church/groups', label: 'Groups' },
+    ...(me.data && canAddMembers(me.data)
+      ? [
+          { href: '/church/follow-ups', label: 'Follow-ups' },
+          { href: '/church/visitors', label: 'Visitor cards' },
+        ]
+      : []),
     ...(me.data?.permissions.canManageMembership ? [{ href: '/church/leaders', label: 'Pastors & shepherds' }] : []),
   ];
   return (

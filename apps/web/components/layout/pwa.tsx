@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, WifiOff, X } from 'lucide-react';
+import { CloudUpload, Download, WifiOff, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { platform } from '@/lib/platform';
+import { flushSaves, pendingSaves, QUEUE_EVENT } from '@/lib/offline-queue';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -241,7 +242,36 @@ export function OfflineBanner() {
   if (online) return null;
   return (
     <div className="sticky top-0 z-40 flex items-center justify-center gap-2 bg-warning px-3 py-1.5 text-sm text-white" role="status">
-      <WifiOff className="h-4 w-4" /> You are offline. Uploads pause and resume when you reconnect.
+      <WifiOff className="h-4 w-4" /> You are offline. Uploads pause, and attendance you save is kept on this phone until you reconnect.
+    </div>
+  );
+}
+
+/** Sends attendance saved offline once the device is back online, and says how many are waiting. */
+export function OfflineSync({ userId }: { userId: string }) {
+  const online = useOnline();
+  const [waiting, setWaiting] = useState(0);
+  useEffect(() => {
+    const count = () => setWaiting(pendingSaves(userId).length);
+    count();
+    window.addEventListener(QUEUE_EVENT, count);
+    window.addEventListener('storage', count);
+    return () => {
+      window.removeEventListener(QUEUE_EVENT, count);
+      window.removeEventListener('storage', count);
+    };
+  }, [userId]);
+  useEffect(() => {
+    if (!online || !waiting) return;
+    void flushSaves(userId).then((r) => {
+      if (r.sent.length) toast.success(`Sent attendance saved offline: ${r.sent.join(', ')}`);
+      for (const f of r.failed) toast.error(`Couldn’t save ${f.label}: ${f.message}`, { duration: 10000 });
+    });
+  }, [online, waiting, userId]);
+  if (!waiting) return null;
+  return (
+    <div className="sticky top-0 z-40 flex items-center justify-center gap-2 bg-brand px-3 py-1.5 text-sm text-white" role="status" data-offline-queue>
+      <CloudUpload className="h-4 w-4" /> {waiting} attendance sheet{waiting === 1 ? '' : 's'} saved on this phone, waiting to send{online ? '…' : ' when you’re back online.'}
     </div>
   );
 }

@@ -9,6 +9,10 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
+import { FollowUpButton } from '@/components/church/follow-up';
+import { AppAccessCard, MilestonesCard } from '@/components/church/member-extras';
+import { useMe } from '@/lib/queries';
+import { canAddMembers } from '@/lib/membership';
 import { api, errorMessage } from '@/lib/api';
 import { formatDay, mk, sessionName, whatsappLink, type MemberDetail } from '@/lib/membership';
 import { GUEST_INTENT_LABELS } from '@wcc/shared';
@@ -28,6 +32,7 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const m = useQuery({ queryKey: mk.member(id), queryFn: () => api<MemberDetail>(`/members/${id}`) });
+  const me = useMe();
   if (m.isLoading) return <PageLoader />;
   const d = m.data;
   if (!d) return <EmptyState title="Member not found">{m.error ? errorMessage(m.error) : null}</EmptyState>;
@@ -74,6 +79,7 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
                 </Button>
               </a>
             )}
+            {me.data && canAddMembers(me.data) && <FollowUpButton memberId={d.id} name={d.fullName} />}
             {d.email && (
               <a href={`mailto:${d.email}`}>
                 <Button size="sm" variant="outline">
@@ -136,6 +142,8 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
           )}
           {d.history.length >= 30 && <p className="mt-2 text-xs text-muted">Showing the latest 30.</p>}
         </Card>
+        <MilestonesCard memberId={d.id} canEdit={d.canEdit} />
+        <AppAccessCard d={d} />
         <Card className="p-4 lg:col-span-2">
           <h2 className="mb-2 font-semibold">People {d.fullName.split(' ')[0]} brought ({d.brought.length})</h2>
           {d.brought.length ? (

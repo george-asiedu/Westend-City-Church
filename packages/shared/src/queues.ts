@@ -17,7 +17,19 @@ export const NOTIFY_JOBS = {
   BIRTHDAYS: 'birthdays',
   /** A Super Admin asked specific basontas to record attendance. */
   REMIND_GROUPS: 'remind-groups',
+  /** Send a ready-made payload to some users (announcements, follow-up assignments…). */
+  PUSH: 'push',
+  /** Scheduled announcements whose time has come. */
+  ANNOUNCEMENTS_DUE: 'announcements-due',
+  /** Tomorrow's bacenta rota. */
+  ROSTER_REMINDERS: 'roster-reminders',
+  MONTHLY_REPORT: 'monthly-report',
 } as const;
+export interface PushJob {
+  userIds: string[];
+  payload: PushPayload;
+  kind: 'reminder' | 'stats' | 'birthday' | 'announcement';
+}
 export interface RemindGroupsJob {
   date: string;
   groupIds: string[];
@@ -49,6 +61,7 @@ export interface ExportJobData {
 }
 
 export type MailTemplate =
+  | 'monthly-report'
   | 'invite'
   | 'password-reset'
   | '2fa-enabled'

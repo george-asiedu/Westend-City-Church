@@ -12,6 +12,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Field, Input, Select } from '@/components/ui/form';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, GroupFormDialog, MemberFormDialog, PastorCard } from '@/components/church/church-ui';
+import { RosterCard } from '@/components/church/roster';
 import { GroupStatsPanel } from '@/components/church/group-stats';
 import { AddExistingDialog, BasontasCard, BirthdaysCard, MemberTeamsDialog, TeamsCard } from '@/components/church/group-parts';
 import { api, errorMessage } from '@/lib/api';
@@ -239,6 +240,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             {g.type === 'CONSTITUENCY' && <BasontasCard g={g} onAdd={() => setAddingBasonta(true)} />}
             {g.type === 'BACENTA' && <TeamsCard g={g} />}
             <BirthdaysCard groupId={g.id} />
+            {g.type === 'BACENTA' && <RosterCard g={g} />}
             <ShepherdsCard g={g} />
             {g.description && (
               <Card className="p-4 text-sm">

@@ -483,8 +483,8 @@ export class MembershipService {
   }
 
   /** Members of a group with a birthday in the next `days` days (today included), soonest first. */
-  async upcomingBirthdays(user: AuthUser, id: string, days = 30): Promise<UpcomingBirthdayDto[]> {
-    this.assertView(user);
+  async upcomingBirthdays(user: AuthUser, id: string, days = 30, asMember = false): Promise<UpcomingBirthdayDto[]> {
+    if (!asMember) this.assertView(user);
     const g = await this.loadGroup(id);
     const rows = await this.prisma.member.findMany({
       where: { ...memberWhereFor(g), isActive: true, dateOfBirth: { not: null } },
@@ -717,6 +717,12 @@ export class MembershipService {
     return { items: items.map((m) => this.toMemberDto(user, m, seen.get(m.id) ?? null)), nextCursor, total };
   }
 
+  /** A member's own record (for their "My church" page). */
+  async memberForSelf(id: string, user: AuthUser) {
+    const m = await this.prisma.member.findUniqueOrThrow({ where: { id }, include: memberInclude });
+    return { ...this.toMemberDto(user, m, null), canEdit: false };
+  }
+
   async getMember(user: AuthUser, id: string) {
     this.assertView(user);
     const m = await this.prisma.member.findUnique({ where: { id }, include: { ...memberInclude, convertedFrom: { include: { broughtBy: { select: { id: true, fullName: true } } } } } });
@@ -736,8 +742,14 @@ export class MembershipService {
       }),
     ]);
     const seen = await this.lastSeen([id]);
+    const [account, invite] = await Promise.all([
+      this.prisma.user.findFirst({ where: { memberId: id }, select: { status: true, lastLoginAt: true, totpEnabled: true } }),
+      this.prisma.invitation.findFirst({ where: { memberId: id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } }, select: { createdAt: true } }),
+    ]);
     return {
       ...this.toMemberDto(user, m, seen.get(id) ?? null),
+      account: account ? { status: account.status, lastLoginAt: account.lastLoginAt?.toISOString() ?? null, twoFactor: account.totpEnabled } : null,
+      invitedAt: invite?.createdAt.toISOString() ?? null,
       broughtBy: m.convertedFrom?.broughtBy ?? null,
       history: history.map((h) => ({
         sessionId: h.session.id,
@@ -942,7 +954,7 @@ export class MembershipService {
 
   private guestDto(g: Prisma.GuestGetPayload<{ include: { convertedMember: { select: { id: true; fullName: true } } } }> & {
     broughtBy?: { id: string; fullName: string } | null;
-    session?: { id: string; date: Date; serviceType: string; title: string | null; group: { id: string; name: string } | null };
+    session?: { id: string; date: Date; serviceType: string; title: string | null; group: { id: string; name: string } | null } | null;
   }): GuestDto {
     return {
       id: g.id,
@@ -951,6 +963,11 @@ export class MembershipService {
       intent: g.intent,
       broughtBy: g.broughtBy ?? null,
       convertedMember: g.convertedMember,
+      fromCard: !g.sessionId,
+      location: g.location,
+      howHeard: g.howHeard,
+      prayerRequest: g.prayerRequest,
+      createdAt: g.createdAt.toISOString(),
       ...(g.session
         ? { session: { id: g.session.id, date: fromDateOnly(g.session.date)!, serviceType: g.session.serviceType, title: g.session.title, group: g.session.group } }
         : {}),

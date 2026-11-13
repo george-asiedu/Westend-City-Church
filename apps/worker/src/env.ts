@@ -52,6 +52,9 @@ const schema = z.object({
   STATS_CRON_SUNDAY: z.string().default('0 18 * * 0'),
   /** Daily birthday notifications (cron, NOTIFY_TZ). */
   BIRTHDAY_CRON: z.string().default('0 7 * * *'),
+  ANNOUNCEMENTS_CRON: z.string().default('*/5 * * * *'),
+  ROSTER_CRON: z.string().default('0 18 * * *'),
+  MONTHLY_REPORT_CRON: z.string().default('0 8 1 * *'),
 });
 
 export type Env = z.infer<typeof schema>;

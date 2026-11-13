@@ -42,7 +42,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: 'Super Admin',
   PASTOR: 'Pastor',
   SHEPHERD: 'Shepherd',
-  VIEWER: 'Viewer',
+  VIEWER: 'Member',
 };
 
 /** Permissions a Super Admin can grant to other roles (Super Admin always has them). */
@@ -111,3 +111,13 @@ export const CHURCH_ROLE_SUGGESTIONS = [
   'Protocol',
   'Pastor',
 ];
+
+export const FOLLOW_UP_STATUS_LABELS = {
+  OPEN: 'To do',
+  CONTACTED: 'Contacted',
+  VISITED: 'Visited',
+  UNREACHABLE: 'Not reachable',
+  DONE: 'Done',
+} as const;
+export const MILESTONE_TYPES = ['Salvation', 'Foundation school', 'Water baptism', 'Holy Spirit baptism', 'Wedding', 'New believers class', 'Ordination'] as const;
+export const ROLE_LABEL_MEMBER = 'Member';

@@ -1,5 +1,7 @@
 'use client';
 
+import { isOffline, queueSave } from '@/lib/offline-queue';
+import { useMe } from '@/lib/queries';
 import { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -281,6 +283,7 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
   const { id } = use(params);
   const router = useRouter();
   const qc = useQueryClient();
+  const me = useMe();
   const key = mk.session(id);
   const sheet = useQuery({ queryKey: key, queryFn: () => api<AttendanceSheetDto>(`/attendance/sessions/${id}`) });
   const s = sheet.data;
@@ -341,11 +344,7 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
     void qc.invalidateQueries({ queryKey: ['groups'] });
     void qc.invalidateQueries({ queryKey: ['group'] });
   };
-  const save = useMutation({
-    mutationFn: () =>
-      api<AttendanceSheetDto>(`/attendance/sessions/${id}`, {
-        method: 'PUT',
-        body: {
+  const sheetBody = () => ({
           rosterIds: changed,
           presentIds: changed.filter(isPresent),
           visitorCount: Number(meta.visitors || 0),
@@ -354,8 +353,9 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
           serviceType: meta.serviceType.trim() || undefined,
           title: meta.title.trim() || null,
           date: meta.date || undefined,
-        },
-      }),
+        });
+  const save = useMutation({
+    mutationFn: (body: ReturnType<typeof sheetBody>) => api<AttendanceSheetDto>(`/attendance/sessions/${id}`, { method: 'PUT', body }),
     onSuccess: (r) => {
       setChanges(new Map());
       refreshAll(r);
@@ -363,7 +363,13 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
       // Done: go back to where they came from instead of showing the same sheet again.
       router.push(r.session.group ? `/church/groups/${r.session.group.id}` : '/church/attendance');
     },
-    onError: (e) => toast.error(errorMessage(e)),
+    onError: (e, body) => {
+      if (!isOffline(e) || !me.data || !s) return toast.error(errorMessage(e));
+      queueSave({ userId: me.data.id, path: `/attendance/sessions/${id}`, method: 'PUT', body, label: `${s.session.group?.name ?? s.session.serviceType} ${s.session.date}` });
+      setChanges(new Map());
+      toast.success('No signal: saved on this phone. It will be sent automatically when you’re back online.', { duration: 8000 });
+      router.push(s.session.group ? `/church/groups/${s.session.group.id}` : '/church/attendance');
+    },
   });
 
   if (sheet.isLoading) return <PageLoader />;
@@ -610,7 +616,7 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
             <p className="min-w-0 flex-1 truncate text-sm text-muted">
               {dirty ? `Not saved yet: ${unsavedText.join(', ')}` : 'All changes saved'}
             </p>
-            <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate()}>
+            <Button loading={save.isPending} disabled={!dirty} onClick={() => save.mutate(sheetBody())}>
               Save attendance
             </Button>
           </div>

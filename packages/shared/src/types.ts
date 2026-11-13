@@ -21,6 +21,8 @@ export interface MeResponse {
   role: Role;
   status: UserStatus;
   totpEnabled: boolean;
+  /** Linked member record (member accounts). */
+  memberId: string | null;
   mustEnable2fa: boolean;
   grants: CategoryGrant[];
   permissions: {
@@ -188,6 +190,12 @@ export interface GuestDto {
   intent: 'VISIT' | 'JOINING';
   broughtBy: { id: string; fullName: string } | null;
   convertedMember: { id: string; fullName: string } | null;
+  /** Filled in by the visitor themselves (QR visitor card), not brought to a meeting. */
+  fromCard: boolean;
+  location: string | null;
+  howHeard: string | null;
+  prayerRequest: string | null;
+  createdAt: string;
   session?: { id: string; date: string; serviceType: string; title: string | null; group: { id: string; name: string } | null };
 }
 
@@ -325,4 +333,92 @@ export interface UpcomingBirthdayDto {
   daysAway: number;
   /** Age they turn, if the year of birth is known. */
   turning: number | null;
+}
+
+// ---------------------------------------------------------------- follow-ups
+export type FollowUpStatus = 'OPEN' | 'CONTACTED' | 'VISITED' | 'UNREACHABLE' | 'DONE';
+export interface FollowUpDto {
+  id: string;
+  reason: string;
+  status: FollowUpStatus;
+  dueOn: string | null;
+  overdue: boolean;
+  createdAt: string;
+  closedAt: string | null;
+  person: { kind: 'MEMBER' | 'GUEST'; id: string; fullName: string; phone: string | null; group: string | null };
+  assignedTo: { id: string; fullName: string } | null;
+  createdBy: { id: string; fullName: string } | null;
+  notes: Array<{ id: string; text: string; status: FollowUpStatus | null; author: string | null; createdAt: string }>;
+  canEdit: boolean;
+}
+
+// ---------------------------------------------------------------- rosters
+export interface RosterSlotDto {
+  id: string;
+  date: string;
+  service: string | null;
+  role: { id: string; name: string } | null;
+  member: { id: string; fullName: string; phone: string | null };
+  note: string | null;
+}
+
+// ---------------------------------------------------------------- events
+export type RsvpStatus = 'GOING' | 'MAYBE' | 'NOT_GOING';
+export interface ChurchEventDto {
+  id: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  group: { id: string; name: string } | null;
+  rsvpEnabled: boolean;
+  capacity: number | null;
+  counts: { going: number; maybe: number; notGoing: number; people: number };
+  myRsvp: { status: RsvpStatus; guests: number } | null;
+  canEdit: boolean;
+}
+
+// ---------------------------------------------------------------- milestones
+export interface MilestoneDto {
+  id: string;
+  type: string;
+  date: string;
+  note: string | null;
+}
+
+// ---------------------------------------------------------------- announcements
+export type AnnouncementAudience = 'CHURCH' | 'GROUPS' | 'LEADERS';
+export interface AnnouncementDto {
+  id: string;
+  title: string;
+  body: string;
+  linkUrl: string | null;
+  audience: AnnouncementAudience;
+  groups: Array<{ id: string; name: string }>;
+  pinned: boolean;
+  publishAt: string;
+  expiresAt: string | null;
+  createdBy: string | null;
+  read: boolean;
+  /** Leaders and admins: how many in the audience have opened it. */
+  seen: { by: number; of: number } | null;
+  canEdit: boolean;
+}
+
+// ---------------------------------------------------------------- members' own view
+export interface MyChurchDto {
+  member: MemberDto | null;
+  leaders: Array<{ group: { id: string; name: string; type: GroupTypeKey }; pastor: PastorDto | null; shepherds: PastorDto[] }>;
+  attendance: Array<{ date: string; name: string }>;
+  birthdays: Array<UpcomingBirthdayDto & { group: string }>;
+  roster: RosterSlotDto[];
+}
+
+// ---------------------------------------------------------------- import
+export interface ImportRowResult {
+  row: number;
+  fullName: string;
+  status: 'create' | 'duplicate' | 'error';
+  message: string | null;
 }

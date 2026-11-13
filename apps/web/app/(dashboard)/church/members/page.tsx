@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Download, Phone, Plus, Users } from 'lucide-react';
+import { Download, Phone, Plus, Upload, Users } from 'lucide-react';
 import type { MemberDto } from '@wcc/shared';
 import { Pager } from '@/components/ui/pager';
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/table';
@@ -80,6 +80,13 @@ export default function MembersPage() {
             <Button variant="outline" loading={exporting} onClick={exportAll}>
               <Download className="h-4 w-4" /> CSV
             </Button>
+            {canAddMembers(me.data!) && (
+              <Link href="/church/members/import">
+                <Button variant="outline">
+                  <Upload className="h-4 w-4" /> Import
+                </Button>
+              </Link>
+            )}
             {canAddMembers(me.data!) && (
               <Button onClick={() => setAdding(true)}>
                 <Plus className="h-4 w-4" /> Add member
