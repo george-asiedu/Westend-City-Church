@@ -139,6 +139,14 @@ export function render(job: MailJob): { subject: string; html: string; text: str
         disclaimer: 'If you did not make this change, contact an administrator immediately.',
       };
       break;
+    case 'account-approved':
+      subject = 'Your WCC Media account is ready';
+      l = {
+        greeting: hello,
+        paragraphs: [`Your account has been approved${d.role ? ` as ${d.role}` : ''}. You can now sign in with the email and password you chose.`],
+        cta: { label: 'Sign in', href: d.link ?? env.WEB_ORIGIN },
+      };
+      break;
     case 'monthly-report':
       subject = `${d.month ?? 'Monthly'} church report`;
       l = {

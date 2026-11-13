@@ -9,7 +9,7 @@ export type Role = (typeof Role)[keyof typeof Role];
 export const ROLES = Object.values(Role);
 export const ADMIN_ROLES: readonly Role[] = [Role.SUPER_ADMIN];
 
-export const UserStatus = { INVITED: 'INVITED', ACTIVE: 'ACTIVE', SUSPENDED: 'SUSPENDED' } as const;
+export const UserStatus = { INVITED: 'INVITED', ACTIVE: 'ACTIVE', SUSPENDED: 'SUSPENDED', PENDING_APPROVAL: 'PENDING_APPROVAL' } as const;
 export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
 
 export const MediaType = { IMAGE: 'IMAGE', VIDEO: 'VIDEO' } as const;

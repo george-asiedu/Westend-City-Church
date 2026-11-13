@@ -31,12 +31,17 @@ class JoinLinkDto {
   @IsOptional() @IsInt() @Min(1) @Max(5000) maxUses?: number | null;
   @IsOptional() @IsInt() @Min(1) @Max(365) expiresInDays?: number | null;
 }
-class JoinRequestDto {
+class JoinDto {
+  @IsString() @MinLength(2) @MaxLength(120) fullName!: string;
+  @IsOptional() @IsString() @MaxLength(40) title?: string;
   @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
   @IsEmail()
   @MaxLength(254)
   email!: string;
-  @IsOptional() @IsString() @MaxLength(120) fullName?: string;
+  @IsOptional() @IsString() @MaxLength(30) phone?: string;
+  @IsString() @MaxLength(200) password!: string;
+  @IsOptional() @IsUUID() basontaId?: string | null;
+  @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('4', { each: true }) bacentaIds?: string[];
 }
 
 @Controller()
@@ -64,8 +69,18 @@ export class JoinLinksController {
   @Public()
   @SkipCsrfToken() // no session yet: Origin check only
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  @Post('public/join/:code') request(@Param('code') code: string, @Body() d: JoinRequestDto, @Meta() m: ReqMeta) {
-    return this.invitations.requestJoin(String(code).slice(0, 40), d, m);
+  @Post('public/join/:code') join(@Param('code') code: string, @Body() d: JoinDto, @Meta() m: ReqMeta) {
+    return this.invitations.join(String(code).slice(0, 40), d, m);
+  }
+
+  @Get('join-links/signups') signups(@CurrentUser() u: AuthUser) {
+    return this.invitations.pendingSignups(u);
+  }
+  @Post('join-links/signups/:id/approve') @HttpCode(204) async approveSignup(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() m: ReqMeta) {
+    await this.invitations.decideSignup(u, id, true, m);
+  }
+  @Post('join-links/signups/:id/decline') @HttpCode(204) async declineSignup(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() m: ReqMeta) {
+    await this.invitations.decideSignup(u, id, false, m);
   }
 }
 

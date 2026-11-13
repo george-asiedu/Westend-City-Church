@@ -1,20 +1,45 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { MailCheck, ShieldCheck } from 'lucide-react';
+import { Clock, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Field, Input } from '@/components/ui/form';
+import { Checkbox, Field, Input, PasswordInput, Select } from '@/components/ui/form';
 import { Card, PageLoader } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
 
-/** Someone scanned a QR invite: they give their email and we send them their own invitation link. */
+interface Info {
+  label: string;
+  roleLabel: string;
+  needsApproval: boolean;
+  basontas: Array<{ id: string; name: string; constituency: string | null }>;
+  bacentas: Array<{ id: string; name: string }>;
+}
+
+/** Someone scanned a QR join code: they create their account here, in one go. */
 export default function JoinPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
-  const info = useQuery({ queryKey: ['join', code], queryFn: () => api<{ label: string; roleLabel: string; needsApproval: boolean }>(`/public/join/${encodeURIComponent(code)}`), retry: false });
-  const [f, setF] = useState({ fullName: '', email: '' });
-  const send = useMutation({ mutationFn: () => api<{ needsApproval: boolean }>(`/public/join/${encodeURIComponent(code)}`, { method: 'POST', body: f }) });
+  const path = `/public/join/${encodeURIComponent(code)}`;
+  const info = useQuery({ queryKey: ['join', code], queryFn: () => api<Info>(path, { anonymous: true }), retry: false });
+  const [f, setF] = useState({ fullName: '', title: '', email: '', phone: '', password: '', basontaId: '', bacentaIds: [] as string[] });
+  const [showBacentas, setShowBacentas] = useState(false);
+  const basonta = useMemo(() => info.data?.basontas.find((b) => b.id === f.basontaId), [info.data, f.basontaId]);
+  const send = useMutation({
+    mutationFn: async () => {
+      const r = await api<{ status: 'ACTIVE' | 'PENDING_APPROVAL' }>(path, {
+        method: 'POST',
+        anonymous: true,
+        body: { ...f, title: f.title || undefined, phone: f.phone || undefined, basontaId: f.basontaId || null },
+      });
+      // Members are in straight away: sign them in.
+      if (r.status === 'ACTIVE') {
+        await api('/auth/login', { method: 'POST', anonymous: true, body: { email: f.email, password: f.password } });
+        window.location.assign('/me/church');
+      }
+      return r;
+    },
+  });
 
   if (info.isLoading) return <PageLoader />;
   if (info.error)
@@ -27,15 +52,14 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         </Link>
       </Card>
     );
-  if (send.isSuccess)
+  const d = info.data!;
+  if (send.data?.status === 'PENDING_APPROVAL')
     return (
       <Card className="space-y-3 p-6 text-center" data-join-done>
-        <MailCheck className="mx-auto h-10 w-10 text-success" />
-        <h1 className="text-lg font-semibold">{send.data.needsApproval ? 'Thanks! Your request is in.' : 'Check your email'}</h1>
+        <Clock className="mx-auto h-10 w-10 text-brand" />
+        <h1 className="text-lg font-semibold">Thanks, {f.fullName.split(' ')[0]}! Almost there.</h1>
         <p className="text-sm text-muted">
-          {send.data.needsApproval
-            ? `A church admin will confirm you as a ${info.data!.roleLabel.toLowerCase()}. Then you’ll get an email at ${f.email} with a link to set your password.`
-            : `We’ve sent a link to ${f.email}. Open it on this phone to set your password and you’re in. It can take a minute; check spam too.`}
+          Your {d.roleLabel.toLowerCase()} account is created. A Super Admin will approve it shortly, and we’ll email {f.email} when you can sign in with the password you just chose.
         </p>
       </Card>
     );
@@ -44,7 +68,8 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     <Card className="p-5">
       <h1 className="mb-1 text-lg font-semibold">Join the WCC app</h1>
       <p className="mb-4 text-sm text-muted">
-        You’re joining as a <b>{info.data!.roleLabel}</b>. Announcements, events, your groups and more, all in one place.
+        Create your account as a <b>{d.roleLabel}</b>
+        {d.needsApproval ? '. A Super Admin approves it before you can sign in.' : '. You’ll be signed in straight away.'}
       </p>
       <form
         className="space-y-3"
@@ -53,18 +78,57 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           send.mutate();
         }}
       >
-        <Field label="Your name" htmlFor="j-name">
+        {d.needsApproval && (
+          <Field label="Title (optional)" htmlFor="j-title" hint="e.g. Rev., Pastor, Elder">
+            <Input id="j-title" maxLength={40} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+          </Field>
+        )}
+        <Field label="Full name" htmlFor="j-name">
           <Input id="j-name" required minLength={2} maxLength={120} autoComplete="name" value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} />
         </Field>
-        <Field label="Email" htmlFor="j-email" hint="We’ll send your sign-in link here.">
+        <Field label="Email" htmlFor="j-email">
           <Input id="j-email" type="email" required maxLength={254} autoComplete="email" inputMode="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         </Field>
+        <Field label="Phone (optional)" htmlFor="j-phone" hint="So your leaders can reach you, and for check-in at church">
+          <Input id="j-phone" type="tel" inputMode="tel" maxLength={30} autoComplete="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+        </Field>
+        <Field label="Password" htmlFor="j-pw" hint="At least 8 characters. Avoid common words.">
+          <PasswordInput id="j-pw" required minLength={8} maxLength={200} autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+        </Field>
+        <Field label="Your basonta (optional)" htmlFor="j-basonta" hint={basonta?.constituency ? `Constituency: ${basonta.constituency}` : undefined}>
+          <Select id="j-basonta" value={f.basontaId} onChange={(e) => setF({ ...f, basontaId: e.target.value })}>
+            <option value="">I don’t know / none</option>
+            {d.basontas.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+                {b.constituency ? ` (${b.constituency})` : ''}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {d.bacentas.length > 0 && (
+          <div className="space-y-1">
+            <Checkbox label="I serve in a bacenta (ministry)" checked={showBacentas} onChange={(e) => (setShowBacentas(e.target.checked), !e.target.checked && setF({ ...f, bacentaIds: [] }))} />
+            {showBacentas && (
+              <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+                {d.bacentas.map((b) => (
+                  <Checkbox
+                    key={b.id}
+                    label={b.name}
+                    checked={f.bacentaIds.includes(b.id)}
+                    onChange={(e) => setF({ ...f, bacentaIds: e.target.checked ? [...f.bacentaIds, b.id] : f.bacentaIds.filter((x) => x !== b.id) })}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {send.error && <p className="text-sm text-danger">{errorMessage(send.error)}</p>}
         <Button type="submit" className="w-full" loading={send.isPending}>
-          Continue
+          Create my account
         </Button>
         <p className="flex items-center justify-center gap-1 text-xs text-muted">
-          <ShieldCheck className="h-3.5 w-3.5" /> Your email is only used for your account.
+          <ShieldCheck className="h-3.5 w-3.5" /> Your details are only shared with your church leaders.
         </p>
         <p className="text-center text-sm">
           <Link href="/login" className="text-brand hover:underline">

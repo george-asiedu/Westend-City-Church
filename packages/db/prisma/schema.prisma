@@ -24,6 +24,8 @@ enum UserStatus {
   INVITED
   ACTIVE
   SUSPENDED
+  /// Signed up with a pastor/shepherd QR code; a Super Admin must approve.
+  PENDING_APPROVAL
 }
 
 enum MediaType {
@@ -88,7 +90,10 @@ model User {
   eventsCreated     Event[]              @relation("EventCreatedBy")
   mediaUploaded     MediaAsset[]         @relation("MediaUploadedBy")
   invitationsSent   Invitation[]         @relation("InvitedBy")
-  joinLinks         JoinLink[]
+  joinLinks         JoinLink[]           @relation("JoinLinkCreatedBy")
+  /// Signed up with this QR join link.
+  joinedViaId       String?              @db.Uuid
+  joinedVia         JoinLink?            @relation("JoinedVia", fields: [joinedViaId], references: [id], onDelete: SetNull)
   auditLogs         AuditLog[]
   passwordResets    PasswordResetToken[]
   emailChanges      EmailChangeToken[]
@@ -874,7 +879,8 @@ model JoinLink {
   expiresAt   DateTime?
   revokedAt   DateTime?
   createdById String       @db.Uuid
-  createdBy   User         @relation(fields: [createdById], references: [id])
+  createdBy   User         @relation("JoinLinkCreatedBy", fields: [createdById], references: [id])
   createdAt   DateTime     @default(now())
   invitations Invitation[]
+  users       User[]       @relation("JoinedVia")
 }

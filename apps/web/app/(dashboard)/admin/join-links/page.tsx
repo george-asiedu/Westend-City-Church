@@ -26,13 +26,16 @@ interface JoinLink {
   createdAt: string;
   createdBy: string | null;
 }
-interface PendingInvite {
+interface Signup {
   id: string;
+  fullName: string;
+  title: string | null;
   email: string;
+  phone: string | null;
   role: Role;
   createdAt: string;
-  needsApproval: boolean;
-  joinLink: { id: string; label: string } | null;
+  via: string | null;
+  basonta: string | null;
 }
 
 const ROLES: Array<Exclude<Role, 'SUPER_ADMIN'>> = ['VIEWER', 'SHEPHERD', 'PASTOR'];
@@ -44,29 +47,29 @@ export default function JoinLinksPage() {
   const origin = useOrigin();
   const ok = !!me.data?.permissions.isAdmin;
   const links = useQuery({ queryKey: ['join-links'], queryFn: () => api<JoinLink[]>('/join-links'), enabled: ok });
-  const invites = useQuery({ queryKey: ['invitations'], queryFn: () => api<PendingInvite[]>('/invitations'), enabled: ok });
+  const signups = useQuery({ queryKey: ['join-links', 'signups'], queryFn: () => api<Signup[]>('/join-links/signups'), enabled: ok });
   const [creating, setCreating] = useState(false);
   const [showing, setShowing] = useState<JoinLink | null>(null);
-  const refresh = () => (qc.invalidateQueries({ queryKey: ['join-links'] }), qc.invalidateQueries({ queryKey: ['invitations'] }));
+  const refresh = () => qc.invalidateQueries({ queryKey: ['join-links'] });
   const approve = useMutation({
-    mutationFn: (id: string) => api(`/invitations/${id}/approve`, { method: 'POST' }),
-    onSuccess: () => (toast.success('Approved: the invitation email is on its way'), refresh()),
+    mutationFn: (id: string) => api(`/join-links/signups/${id}/approve`, { method: 'POST' }),
+    onSuccess: () => (toast.success('Approved. They’ve been emailed that they can sign in.'), refresh()),
     onError: (e) => toast.error(errorMessage(e)),
   });
   const decline = useMutation({
-    mutationFn: (id: string) => api(`/invitations/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => api(`/join-links/signups/${id}/decline`, { method: 'POST' }),
     onSuccess: () => (toast.success('Declined'), refresh()),
     onError: (e) => toast.error(errorMessage(e)),
   });
   if (me.isLoading) return <PageLoader />;
   if (!ok) return <EmptyState title="Only Super Admins can make QR invites" />;
-  const waiting = (invites.data ?? []).filter((i) => i.needsApproval);
+  const waiting = signups.data ?? [];
 
   return (
     <>
       <PageHeader
         title="QR invites"
-        subtitle="Print or share one QR code to invite many people at once. They scan it, enter their email, and get their own invitation link."
+        subtitle="Print or share one QR code to invite many people at once. They scan it and create their own account."
         actions={
           <Button onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" /> New QR invite
@@ -76,14 +79,19 @@ export default function JoinLinksPage() {
       {waiting.length > 0 && (
         <Card className="mb-4 space-y-2 border-warning/50 p-4" data-approvals>
           <h2 className="font-semibold">Waiting for your approval ({waiting.length})</h2>
-          <p className="text-xs text-muted">Pastor and shepherd requests from a QR code need a Super Admin’s OK before the invitation email is sent.</p>
+          <p className="text-xs text-muted">Pastors and shepherds who signed up with a QR code can sign in once you approve them.</p>
           <ul className="divide-y divide-border text-sm">
             {waiting.map((i) => (
               <li key={i.id} className="flex flex-wrap items-center gap-2 py-2">
                 <span className="min-w-0 flex-1 break-all">
-                  <b>{i.email}</b>{' '}
+                  <b>
+                    {i.title ? `${i.title} ` : ''}
+                    {i.fullName}
+                  </b>{' '}
                   <span className="text-muted">
-                    · {ROLE_LABELS[i.role]} · {i.joinLink?.label ?? 'QR invite'} · {formatDay(i.createdAt.slice(0, 10))}
+                    · {i.email}
+                    {i.phone ? ` · ${i.phone}` : ''} · {ROLE_LABELS[i.role]}
+                    {i.basonta ? ` · ${i.basonta}` : ''} · {i.via ?? 'QR invite'} · {formatDay(i.createdAt.slice(0, 10))}
                   </span>
                 </span>
                 <Button size="sm" loading={approve.isPending && approve.variables === i.id} onClick={() => approve.mutate(i.id)}>
@@ -137,8 +145,8 @@ export default function JoinLinksPage() {
           <QrCard
             url={`${origin}/join/${showing.code}`}
             title={`Join the WCC app`}
-            subtitle={`For ${WHO[showing.role]}. Scan, enter your email, and we’ll send you a link to finish.`}
-            steps={['Open your phone camera and point it here', 'Enter your name and email', 'Open the email and set your password']}
+            subtitle={`For ${WHO[showing.role]}. Scan it and create your account in a minute.`}
+            steps={['Open your phone camera and point it here', 'Tap the link that appears', 'Fill in your details and choose a password']}
             filename={`wcc-join-${showing.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
           />
         )}
@@ -175,7 +183,7 @@ function CreateDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpen
         <Field label="Name it" htmlFor="jl-label" hint="Only you see this, e.g. “Members, Sunday 23 Nov”">
           <Input id="jl-label" maxLength={80} value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} />
         </Field>
-        <Field label="They join as" htmlFor="jl-role" hint={f.role === 'VIEWER' ? 'Their invitation email goes out straight away.' : 'You approve each person before their invitation email goes out.'}>
+        <Field label="They join as" htmlFor="jl-role" hint={f.role === 'VIEWER' ? 'They can use the app as soon as they sign up.' : 'You approve each person before they can sign in.'}>
           <Select id="jl-role" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as Role })}>
             {ROLES.map((r) => (
               <option key={r} value={r}>

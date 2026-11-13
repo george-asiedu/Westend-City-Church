@@ -11,6 +11,7 @@ import { randomToken, sha256 } from '../common/crypto';
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 import { ROLE_LABELS } from '@wcc/shared';
+import { normalizePhone } from '../church/audience.service';
 
 const TTL_MS = 72 * 3600_000;
 
@@ -190,56 +191,119 @@ export class InvitationsService {
 
   async joinInfo(code: string) {
     const l = await this.liveJoinLink(code);
-    return { label: l.label, role: l.role, roleLabel: ROLE_LABELS[l.role], needsApproval: l.role !== 'VIEWER' };
+    const groups = await this.prisma.churchGroup.findMany({
+      where: { isActive: true, type: { in: ['BASONTA', 'BACENTA'] } },
+      select: { id: true, name: true, type: true, parent: { select: { name: true } } },
+      orderBy: { name: 'asc' },
+    });
+    return {
+      label: l.label,
+      role: l.role,
+      roleLabel: ROLE_LABELS[l.role],
+      needsApproval: l.role !== 'VIEWER',
+      basontas: groups.filter((g) => g.type === 'BASONTA').map((g) => ({ id: g.id, name: g.name, constituency: g.parent?.name ?? null })),
+      bacentas: groups.filter((g) => g.type === 'BACENTA').map((g) => ({ id: g.id, name: g.name })),
+    };
   }
 
   /**
-   * Someone scanned a join QR code and gave their email. We email them the usual invitation
-   * link (which proves the address is theirs). Pastor/shepherd requests wait for a Super Admin.
-   * The reply is the same whether or not the email already has an account.
+   * Someone scanned a QR join code and filled in the sign-up form: their account is created
+   * right away and linked to their member record (an existing one with the same email or phone,
+   * or a new one in the basonta/bacentas they chose; the constituency comes from the basonta).
+   * Members can sign in immediately; pastors and shepherds wait for a Super Admin.
    */
-  async requestJoin(code: string, dto: { email: string; fullName?: string }, meta: ReqMeta) {
+  async join(
+    code: string,
+    dto: { fullName: string; title?: string; email: string; phone?: string; password: string; basontaId?: string | null; bacentaIds?: string[] },
+    meta: ReqMeta,
+  ): Promise<{ status: 'ACTIVE' | 'PENDING_APPROVAL' }> {
     const l = await this.liveJoinLink(code);
     const email = dto.email.trim().toLowerCase();
-    const needsApproval = l.role !== 'VIEWER';
-    const result = { needsApproval };
-    if (await this.prisma.user.findUnique({ where: { email }, select: { id: true } })) return result;
-    // Asking again re-sends instead of piling up invitations.
-    const pending = await this.prisma.invitation.findFirst({ where: { email, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } } });
-    if (pending) {
-      // Re-send the existing invitation (at most once a minute) instead of making another.
-      if (!pending.needsApproval && pending.expiresAt.getTime() < Date.now() + TTL_MS - 60_000) {
-        const token = randomToken();
-        await this.prisma.invitation.update({ where: { id: pending.id }, data: { tokenHash: sha256(token), expiresAt: new Date(Date.now() + TTL_MS) } });
-        await this.send(email, pending.role, token, 'Westend City Church');
-      }
-      return { needsApproval: pending.needsApproval };
-    }
-    const member = await this.prisma.member.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, account: null }, select: { id: true } });
-    const token = randomToken();
-    const claimed = await this.prisma.$transaction(async (tx) => {
-      const used = await tx.joinLink.updateMany({ where: { id: l.id, OR: [{ maxUses: null }, { uses: { lt: l.maxUses ?? 0 } }] }, data: { uses: { increment: 1 } } });
-      if (!used.count) return false;
-      await tx.invitation.updateMany({ where: { email, acceptedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
-      const inv = await tx.invitation.create({
+    const fullName = dto.fullName.trim();
+    const phone = normalizePhone(dto.phone);
+    if (dto.phone?.trim() && !phone) throw badRequest('PHONE', 'That phone number doesn’t look right');
+    if (await this.prisma.user.findUnique({ where: { email }, select: { id: true } })) throw conflict('USER_EXISTS', 'There’s already an account with this email. Sign in instead.');
+    await this.passwords.assertStrong(dto.password, [email, fullName]);
+    const passwordHash = await this.passwords.hash(dto.password);
+    const bacentaIds = [...new Set(dto.bacentaIds ?? [])];
+    const groups = await this.prisma.churchGroup.findMany({ where: { id: { in: [...(dto.basontaId ? [dto.basontaId] : []), ...bacentaIds] }, isActive: true }, select: { id: true, type: true, parentId: true } });
+    const basonta = dto.basontaId ? groups.find((g) => g.id === dto.basontaId && g.type === 'BASONTA') : undefined;
+    if (dto.basontaId && !basonta) throw badRequest('BASONTA', 'Choose a basonta from the list');
+    if (bacentaIds.some((id) => !groups.some((g) => g.id === id && g.type === 'BACENTA'))) throw badRequest('BACENTA', 'Choose bacentas from the list');
+    const status = l.role === 'VIEWER' ? ('ACTIVE' as const) : ('PENDING_APPROVAL' as const);
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const used = await tx.joinLink.updateMany({ where: { id: l.id, revokedAt: null, OR: [{ maxUses: null }, { uses: { lt: l.maxUses ?? 0 } }] }, data: { uses: { increment: 1 } } });
+      if (!used.count) throw badRequest('JOIN_LINK_INVALID', 'This QR code has been used up. Ask the church office for a new one.');
+      // Their member record: one already in the directory with this email or phone (and no account), or a new one.
+      const existing = await tx.member.findFirst({
+        where: { account: null, OR: [{ email: { equals: email, mode: 'insensitive' } }, ...(phone ? [{ phone }] : [])] },
+        select: { id: true, basontaId: true, email: true, phone: true },
+      });
+      const placement = basonta ? { basontaId: basonta.id, constituencyId: basonta.parentId } : {};
+      const member = existing
+        ? await tx.member.update({
+            where: { id: existing.id },
+            data: { ...(existing.basontaId ? {} : placement), email: existing.email ?? email, phone: existing.phone ?? phone },
+            select: { id: true },
+          })
+        : await tx.member.create({ data: { fullName, email, phone, ...placement, createdById: l.createdById }, select: { id: true } });
+      if (bacentaIds.length) await tx.memberBacenta.createMany({ data: bacentaIds.map((groupId) => ({ memberId: member.id, groupId })), skipDuplicates: true });
+      const u = await tx.user.create({
         data: {
           email,
+          fullName,
+          title: dto.title?.trim() || null,
+          phone,
           role: l.role,
-          categoryIds: l.categoryIds,
-          memberId: member?.id ?? null,
-          tokenHash: sha256(token),
-          invitedById: l.createdById,
-          joinLinkId: l.id,
-          needsApproval,
-          expiresAt: new Date(Date.now() + (needsApproval ? 14 * 86_400_000 : TTL_MS)),
+          status,
+          passwordHash,
+          passwordChangedAt: new Date(),
+          memberId: member.id,
+          joinedViaId: l.id,
         },
       });
-      await this.audit.record({ actorId: null, action: 'JOIN_REQUESTED', entityType: 'INVITATION', entityId: inv.id, metadata: { email, role: l.role, link: l.label, name: dto.fullName ?? null }, meta }, tx);
-      return true;
+      if (l.categoryIds.length)
+        await tx.userCategoryAccess.createMany({
+          data: l.categoryIds.map((categoryId) => ({ userId: u.id, categoryId, canView: true, canUpload: l.role !== 'VIEWER', grantedBy: l.createdById })),
+        });
+      await this.audit.record({ actorId: u.id, action: 'JOINED_WITH_QR', entityType: 'USER', entityId: u.id, metadata: { role: l.role, link: l.label, status, linkedExistingMember: !!existing }, meta }, tx);
+      return u;
     });
-    if (!claimed) throw badRequest('JOIN_LINK_INVALID', 'This QR code has been used up. Ask the church office for a new one.');
-    if (!needsApproval) await this.send(email, l.role, token, 'Westend City Church');
-    return result;
+    if (status === 'PENDING_APPROVAL') {
+      const admins = await this.prisma.user.findMany({ where: { role: 'SUPER_ADMIN', status: 'ACTIVE' }, select: { id: true } });
+      await this.queue.push({
+        userIds: admins.map((a) => a.id),
+        kind: 'reminder',
+        payload: { title: `New ${ROLE_LABELS[l.role].toLowerCase()} to approve`, body: `${user.fullName} signed up with “${l.label}”.`, url: '/admin/join-links', tag: 'join-approval' },
+      });
+    }
+    return { status };
+  }
+
+  /** Pastors and shepherds who signed up with a QR code and are waiting for a Super Admin. */
+  async pendingSignups(user: AuthUser) {
+    if (!this.policy.canListUsers(user)) throw forbidden();
+    const rows = await this.prisma.user.findMany({
+      where: { status: 'PENDING_APPROVAL' },
+      select: { id: true, fullName: true, title: true, email: true, phone: true, role: true, createdAt: true, joinedVia: { select: { label: true } }, member: { select: { basonta: { select: { name: true } } } } },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((r) => ({ id: r.id, fullName: r.fullName, title: r.title, email: r.email, phone: r.phone, role: r.role, createdAt: r.createdAt.toISOString(), via: r.joinedVia?.label ?? null, basonta: r.member?.basonta?.name ?? null }));
+  }
+
+  async decideSignup(user: AuthUser, id: string, approve: boolean, meta: ReqMeta) {
+    const u = await this.prisma.user.findUnique({ where: { id }, select: { id: true, status: true, role: true, email: true, fullName: true } });
+    if (!u || u.status !== 'PENDING_APPROVAL') throw notFound('Sign-up');
+    if (!this.policy.canInvite(user, u.role)) throw forbidden();
+    if (approve) {
+      await this.prisma.user.update({ where: { id }, data: { status: 'ACTIVE' } });
+      await this.queue.mail({ to: u.email, template: 'account-approved', data: { name: u.fullName.split(' ')[0] ?? '', role: ROLE_LABELS[u.role], link: `${this.env.WEB_ORIGIN}/login` } });
+    } else {
+      // Their member record stays in the directory; only the login goes.
+      await this.prisma.$transaction([this.prisma.userCategoryAccess.deleteMany({ where: { userId: id } }), this.prisma.auditLog.updateMany({ where: { actorId: id }, data: { actorId: null } }), this.prisma.user.delete({ where: { id } })]);
+    }
+    await this.audit.record({ actorId: user.id, action: approve ? 'SIGNUP_APPROVED' : 'SIGNUP_DECLINED', entityType: 'USER', entityId: approve ? id : null, metadata: { email: u.email, role: u.role }, meta });
   }
 
   private async findValid(token: string) {

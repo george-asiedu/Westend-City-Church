@@ -222,6 +222,8 @@ export interface AttendanceSheetDto {
   presentIds: string[];
   /** memberId → people brought (0 = nobody); missing = not recorded */
   brought: Record<string, number>;
+  /** memberId → when they checked themselves in with the QR code (they're also in presentIds). */
+  checkedIn: Record<string, string>;
   guests: GuestDto[];
   canEdit: boolean;
 }

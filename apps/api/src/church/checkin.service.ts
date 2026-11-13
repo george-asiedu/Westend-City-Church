@@ -11,7 +11,6 @@ import { normalizePhone } from './audience.service';
 
 /** Ghana is on UTC all year, so the church's "today" is the UTC date. */
 const today = () => new Date().toISOString().slice(0, 10);
-const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n;
 export const RELATIONS = ['Child', 'Relative', 'Friend', 'Other'] as const;
 
 export interface Companion {
@@ -79,6 +78,29 @@ export class CheckinService {
     return this.status(user, id);
   }
 
+  /**
+   * Marks members present on their basonta's sheet for this service (same date, service type
+   * and title), creating that sheet if the basonta hasn't started one. One record per member and
+   * sheet, so the pastor ticking them again doesn't count them twice.
+   */
+  private async markBasontas(service: { id: string; date: Date; serviceType: string; title: string | null }, memberIds: string[], at: Date) {
+    const members = await this.prisma.member.findMany({ where: { id: { in: memberIds }, basontaId: { not: null } }, select: { id: true, basontaId: true } });
+    const byBasonta = new Map<string, string[]>();
+    for (const m of members) byBasonta.set(m.basontaId!, [...(byBasonta.get(m.basontaId!) ?? []), m.id]);
+    for (const [groupId, ids] of byBasonta) {
+      const match = { kind: 'GROUP_MEETING' as const, groupId, date: service.date, serviceType: { equals: service.serviceType, mode: 'insensitive' as const }, title: service.title ? { equals: service.title, mode: 'insensitive' as const } : null };
+      let sheet = await this.prisma.attendanceSession.findFirst({ where: match, select: { id: true } });
+      if (!sheet) {
+        try {
+          sheet = await this.prisma.attendanceSession.create({ data: { kind: 'GROUP_MEETING', groupId, date: service.date, serviceType: service.serviceType, title: service.title, notes: 'Started by self check-in at the church service.' }, select: { id: true } });
+        } catch {
+          sheet = await this.prisma.attendanceSession.findFirst({ where: match, select: { id: true } }); // someone else just made it
+        }
+      }
+      if (sheet) await this.prisma.attendanceRecord.createMany({ data: ids.map((memberId) => ({ sessionId: sheet!.id, memberId, via: 'SELF', checkedInAt: at })), skipDuplicates: true });
+    }
+  }
+
   // ------------------------------------------------------------ members (public)
 
   private async live(code: string) {
@@ -112,7 +134,8 @@ export class CheckinService {
 
   /**
    * Checks people in. Signed in: the member linked to the account. Otherwise by phone number
-   * (only first names are shown back, and only to someone standing at that day's QR code).
+   * (only works at that day's open QR code). Each person is also marked present on their
+   * basonta's sheet for this service.
    */
   async checkIn(code: string, user: AuthUser | null, dto: { phone?: string; householdIds?: string[]; companions?: Companion[] }) {
     const s = await this.live(code);
@@ -152,15 +175,15 @@ export class CheckinService {
         await tx.attendanceRecord.update({ where: { sessionId_memberId: { sessionId: s.id, memberId: memberId! } }, data: { broughtCount: brought } });
       }
     });
-    const names = [memberId, ...extra].map((id) => (id === memberId ? null : household.find((h) => h.id === id)?.fullName ?? null));
+    await this.markBasontas(s, [memberId, ...extra], now);
     const me = await this.prisma.member.findUniqueOrThrow({ where: { id: memberId }, select: { fullName: true } });
     return {
       ok: true,
-      name: firstName(me.fullName),
-      household: names.filter((n): n is string => !!n).map(firstName),
+      name: me.fullName,
+      household: extra.map((id) => household.find((h) => h.id === id)!.fullName),
       companions: companions.length,
-      // Phone check-ins see their household's first names, so they can tick them next time.
-      householdChoices: via === 'PHONE' ? household.map((h) => ({ id: h.id, name: firstName(h.fullName) })) : undefined,
+      // Phone check-ins see who checks in with them, so they can tick them next time.
+      householdChoices: via === 'PHONE' ? household.map((h) => ({ id: h.id, name: h.fullName })) : undefined,
     };
   }
 }

@@ -1016,7 +1016,7 @@ export class MembershipService {
     this.assertView(user);
     const { s, canEdit, where } = await this.sessionContext(user, id);
     const [records, guests] = await Promise.all([
-      this.prisma.attendanceRecord.findMany({ where: { sessionId: id }, select: { memberId: true, broughtCount: true } }),
+      this.prisma.attendanceRecord.findMany({ where: { sessionId: id }, select: { memberId: true, broughtCount: true, via: true, checkedInAt: true } }),
       this.prisma.guest.findMany({ where: { sessionId: id }, include: { broughtBy: { select: { id: true, fullName: true } }, convertedMember: { select: { id: true, fullName: true } } }, orderBy: { createdAt: 'asc' } }),
     ]);
     const presentIds = records.map((r) => r.memberId);
@@ -1045,6 +1045,7 @@ export class MembershipService {
       })),
       presentIds,
       brought: Object.fromEntries(records.filter((r) => r.broughtCount !== null).map((r) => [r.memberId, r.broughtCount!])),
+      checkedIn: Object.fromEntries(records.filter((r) => r.via && r.checkedInAt).map((r) => [r.memberId, r.checkedInAt!.toISOString()])),
       guests: guests.map((g) => this.guestDto(g)),
       canEdit,
     };

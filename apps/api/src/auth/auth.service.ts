@@ -62,6 +62,7 @@ export class AuthService {
       await this.audit.record({ actorId: user.id, action: lock ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED', entityType: 'USER', entityId: user.id, meta });
       throw INVALID();
     }
+    if (user.status === 'PENDING_APPROVAL') throw new AppException(HttpStatus.FORBIDDEN, 'PENDING_APPROVAL', 'Your account is waiting for a Super Admin to approve it. You’ll get an email when it’s ready.');
     if (user.status !== 'ACTIVE') throw INVALID();
 
     if (user.totpEnabled) {

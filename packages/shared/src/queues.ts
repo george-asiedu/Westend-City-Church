@@ -62,6 +62,7 @@ export interface ExportJobData {
 
 export type MailTemplate =
   | 'monthly-report'
+  | 'account-approved'
   | 'invite'
   | 'password-reset'
   | '2fa-enabled'

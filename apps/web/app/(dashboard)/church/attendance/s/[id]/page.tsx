@@ -393,7 +393,14 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
       (!term || m.fullName.toLowerCase().includes(term) || m.churchRole.toLowerCase().includes(term) || m.teamRoles.some((r) => r.name.toLowerCase().includes(term))),
   );
   const presentCount = s.roster.filter((m) => isPresent(m.id)).length;
-  const toggle = (mid: string) => s.canEdit && setChanges((c) => new Map(c).set(mid, !isPresent(mid)));
+  const checkedIn = s.checkedIn ?? {};
+  const selfCount = Object.keys(checkedIn).filter((mid) => isPresent(mid)).length;
+  const toggle = (mid: string) => {
+    if (!s.canEdit) return;
+    // They checked themselves in with the QR code at the service: confirm before unticking.
+    if (checkedIn[mid] && isPresent(mid) && !window.confirm('This member checked themselves in at the service with the QR code. Untick anyway?')) return;
+    setChanges((c) => new Map(c).set(mid, !isPresent(mid)));
+  };
   const markShown = (on: boolean) =>
     setChanges((c) => {
       const n = new Map(c);
@@ -483,6 +490,7 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="mr-auto text-muted">
               <b className="text-fg">{presentCount}</b> of {s.roster.length} present
+              {selfCount > 0 && ` · ${selfCount} checked in themselves`}
               {broughtTotal > 0 && ` · ${broughtTotal} brought`}
               {shown.length !== s.roster.length && ` · showing ${shown.length}`}
             </span>
@@ -520,7 +528,14 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
                       {on && <Check className="h-4 w-4" strokeWidth={3} />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{m.fullName}</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate font-medium">{m.fullName}</span>
+                        {checkedIn[m.id] && (
+                          <span className="shrink-0 rounded-full bg-success/15 px-1.5 text-[10px] font-medium text-success" title={`Checked in at ${new Date(checkedIn[m.id]!).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`}>
+                            Checked in
+                          </span>
+                        )}
+                      </span>
                       <span className="block truncate text-xs text-muted">
                         {m.teamRoles.length ? m.teamRoles.map((r) => r.name).join(', ') : m.churchRole}
                         {!s.session.group || s.session.group.type === 'BACENTA' ? ` · ${m.constituency ?? 'No constituency'}` : ''}
