@@ -6,8 +6,14 @@ export const QUEUES = {
   MAINTENANCE: 'maintenance',
   MAIL: 'mail',
   EXPORT: 'export',
+  /** Scheduled notification jobs (reminders, stats, birthdays, rotas, monthly report): one at a time. */
   NOTIFY: 'notify',
+  /** Instant pushes people are waiting for (announcements, follow-ups, test, remind): never stuck behind a scheduled job. */
+  PUSH: 'push',
 } as const;
+
+/** Mail priority (BullMQ: lower runs first): sign-in emails before bulk ones like the monthly report. */
+export const BULK_MAIL_TEMPLATES = ['monthly-report', 'export-ready'] as const;
 
 /** Push-notification jobs. Reminders and stats run on a weekly schedule in the worker. */
 export const NOTIFY_JOBS = {

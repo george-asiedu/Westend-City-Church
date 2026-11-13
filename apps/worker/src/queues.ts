@@ -13,6 +13,7 @@ export const queues = {
   mail: new Queue(QUEUES.MAIL, opts),
   export: new Queue(QUEUES.EXPORT, opts),
   notify: new Queue(QUEUES.NOTIFY, opts),
+  push: new Queue(QUEUES.PUSH, opts),
 };
 
 export const enqueue = {

@@ -88,6 +88,8 @@ async function main(): Promise<void> {
     worker(QUEUES.MAIL, 2, sendMail),
     worker(QUEUES.EXPORT, 1, buildExport, { lockDuration: 10 * 60_000 }),
     worker(QUEUES.NOTIFY, 1, notify),
+    // Instant pushes run separately (and several at once) so they never wait behind a scheduled job.
+    worker(QUEUES.PUSH, 5, notify),
   ];
   log.info({ queues: Object.values(QUEUES), tmp: env.WORKER_TMP_DIR }, 'worker started');
 

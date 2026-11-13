@@ -218,7 +218,7 @@ export async function monthlyReport(month?: string) {
     await queues.mail.add(
       'send',
       { to: a.email, template: 'monthly-report', data: { name: a.fullName.split(' ')[0] ?? '', month: label, lines: lines.join('\n'), link: `${env.WEB_ORIGIN}/church/attendance` } },
-      { attempts: 3, removeOnComplete: 500 },
+      { attempts: 3, removeOnComplete: 500, priority: 10 },
     );
   await pushToUsers(admins.map((a) => a.id), { title: `How ${label} went`, body: `${lines[1]} ${lines[3]}`, url: '/church/attendance', tag: 'monthly' }, 'stats');
   log.info({ month: label, admins: admins.length }, 'monthly report sent');
