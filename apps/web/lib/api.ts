@@ -48,6 +48,10 @@ export interface RequestOpts {
   signal?: AbortSignal;
 }
 
+/** When the server sends no message (e.g. a proxy error page). */
+const fallbackMessage = (status: number) =>
+  status >= 500 ? 'Sorry, something went wrong on our side. Please try again in a moment.' : 'Sorry, that didn’t work. Please try again.';
+
 export async function api<T = unknown>(path: string, opts: RequestOpts = {}, retried = false): Promise<T> {
   const method = opts.method ?? 'GET';
   const qs = opts.query
@@ -82,7 +86,7 @@ export async function api<T = unknown>(path: string, opts: RequestOpts = {}, ret
   if (res.status === 204) return undefined as T;
   const data = (await res.json().catch(() => null)) as (T & { code?: string; message?: string; details?: unknown }) | null;
   if (!res.ok) {
-    const err = new ApiError(res.status, data?.code ?? 'ERROR', data?.message ?? res.status >= 500 ? 'Sorry, something went wrong on our side. Please try again in a moment.' : 'Sorry, that didn’t work. Please try again.', data?.details);
+    const err = new ApiError(res.status, data?.code ?? 'ERROR', data?.message ?? fallbackMessage(res.status), data?.details);
     if (res.status === 401 && retried && !opts.anonymous) toLogin();
     if (res.status === 403 && err.code === 'TOTP_SETUP_REQUIRED' && typeof window !== 'undefined' && !window.location.pathname.startsWith('/account'))
       window.location.assign('/account?setup2fa=1');
