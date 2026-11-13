@@ -51,16 +51,18 @@ function layout(subjectLine: string, l: Layout): { html: string; text: string } 
       ${l.paragraphs.map(p).join('')}
       ${button}
       ${l.note ? p(l.note) : ''}
+      ${p('God bless,')}
+      <p style="margin:-8px 0 24px;font-size:16px;line-height:1.5;color:${INK}">The Westend City Church team</p>
       ${l.disclaimer ? `<p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:#7d8998">${esc(l.disclaimer)}</p>` : ''}
     </td></tr>
     <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:0 32px"><div style="border-top:1px solid #e3e6e8;font-size:0;line-height:0">&nbsp;</div></td></tr>
     <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:20px 32px 28px;font-size:12px;line-height:1.5;color:#545b64">
-      If you have any questions or need help, contact the Media Bacenta team or reply to this email.
+      Need a hand with anything? Just reply to this email and someone from the church will get back to you.
       ${l.cta ? `<br><br><span style="color:#7d8998">Button not working? Paste this link into your browser:<br><a href="${esc(l.cta.href)}" style="color:#0972d3;word-break:break-all">${esc(l.cta.href)}</a></span>` : ''}
     </td></tr>
     <tr><td align="center" style="padding:20px 24px;font-size:11px;line-height:1.5;color:#7d8998">
-      ${esc(env.APP_NAME)} is the private media gallery of Westend City Church (The Life Cathedral).<br>
-      You received this email because of activity on your account. This is a service message.
+      ${esc(env.APP_NAME)} is the private app of Westend City Church (The Life Cathedral).<br>
+      You’re getting this email because of something on your account.
     </td></tr>
   </table>
 </td></tr>
@@ -72,10 +74,10 @@ function layout(subjectLine: string, l: Layout): { html: string; text: string } 
     ...l.paragraphs,
     ...(l.cta ? ['', `${l.cta.label}: ${l.cta.href}`] : []),
     ...(l.note ? ['', l.note] : []),
-    ...(l.disclaimer ? ['', l.disclaimer] : []),
     '',
-    '—',
-    env.APP_NAME,
+    'God bless,',
+    'The Westend City Church team',
+    ...(l.disclaimer ? ['', l.disclaimer] : []),
   ].join('\n');
   return { html, text };
 }
@@ -87,81 +89,98 @@ export function render(job: MailJob): { subject: string; html: string; text: str
   let l: Layout;
   switch (job.template) {
     case 'invite':
-      subject = `You're invited to ${env.APP_NAME}`;
+      subject = `You’re invited to the Westend City Church app`;
       l = {
-        paragraphs: [`${d.inviter ?? 'An administrator'} has invited you to join the Westend City Church media gallery as ${d.role ?? 'a member'}. To accept and create your account, click the button below.`],
-        cta: { label: 'Accept invitation', href: d.link ?? env.WEB_ORIGIN },
-        note: 'For your security, this link can only be used once and will expire in 72 hours.',
-        disclaimer: 'If you were not expecting this invitation, you can safely ignore this email.',
+        paragraphs: [
+          `${d.inviter ?? 'Someone at the church'} has invited you to join the Westend City Church app as ${d.role ?? 'a member'}. It’s where we share announcements, events, photos and more.`,
+          'Tap the button below to set up your account. It only takes a minute.',
+        ],
+        cta: { label: 'Set up my account', href: d.link ?? env.WEB_ORIGIN },
+        note: 'This link works once and is valid for 3 days, to keep your account safe.',
+        disclaimer: 'Not expecting this? No problem, you can simply ignore this email.',
       };
       break;
     case 'password-reset':
-      subject = 'Reset your WCC Media password';
+      subject = 'Let’s get you back in';
       l = {
         greeting: hello,
-        paragraphs: ['We received a request to reset the password for your WCC Media account. To choose a new password, click the button below.'],
-        cta: { label: 'Reset password', href: d.link ?? env.WEB_ORIGIN },
-        note: 'For your account protection, this link can only be used once and will expire in 30 minutes. Resetting your password signs you out of all devices.',
-        disclaimer: 'If you did not request a password reset, you can ignore this email. Your password will not change.',
+        paragraphs: ['We got a request to reset your password. No worries, it happens to all of us.', 'Tap the button below to choose a new one.'],
+        cta: { label: 'Choose a new password', href: d.link ?? env.WEB_ORIGIN },
+        note: 'This link works once and is valid for 30 minutes. Once you’ve changed it, you’ll be signed out on your other devices.',
+        disclaimer: 'Didn’t ask for this? You can ignore this email and your password will stay the same.',
+      };
+      break;
+    case 'password-reset-admin':
+      subject = 'Your password has been reset';
+      l = {
+        greeting: hello,
+        paragraphs: [
+          `${d.inviter ?? 'A church admin'} has reset the password on your account, so you’ve been signed out for now.`,
+          'Tap the button below to choose a new password, and you’ll be right back in.',
+        ],
+        cta: { label: 'Choose a new password', href: d.link ?? env.WEB_ORIGIN },
+        note: 'This link works once and is valid for 24 hours. If it runs out, you can ask for a new one on the sign-in page.',
+        disclaimer: 'Not sure why this happened? Reply to this email and we’ll help.',
       };
       break;
     case '2fa-enabled':
-      subject = 'Two-factor authentication is now on';
+      subject = 'Two-step sign-in is now on';
       l = {
         greeting: hello,
-        paragraphs: ['Two-factor authentication was just turned on for your WCC Media account. From now on you will be asked for a code from your authenticator app when you sign in.'],
-        disclaimer: 'If you did not make this change, contact an administrator immediately.',
+        paragraphs: ['Thanks for adding extra protection to your account. From now on, when you sign in we’ll also ask for a code from your authenticator app.'],
+        disclaimer: 'If you didn’t turn this on, please reply to this email straight away so we can help.',
       };
       break;
     case 'email-change-verify':
-      subject = 'Confirm your new WCC Media email address';
+      subject = 'Please confirm your new email address';
       l = {
         greeting: hello,
-        paragraphs: [`You asked to change the email address on your WCC Media account to ${d.newEmail ?? 'this address'}. To confirm, click the button below.`],
-        cta: { label: 'Confirm email address', href: d.link ?? env.WEB_ORIGIN },
-        note: 'This link can only be used once and will expire in 60 minutes. Confirming signs you out of your other devices.',
-        disclaimer: 'If you did not ask for this, you can ignore this email. Nothing will change.',
+        paragraphs: [`You asked to use ${d.newEmail ?? 'this address'} for your account. Tap the button below to confirm it’s yours.`],
+        cta: { label: 'Confirm my email', href: d.link ?? env.WEB_ORIGIN },
+        note: 'This link works once and is valid for an hour. Once confirmed, you’ll be signed out on your other devices.',
+        disclaimer: 'Didn’t ask for this? You can ignore this email and nothing will change.',
       };
       break;
     case 'email-change-requested':
-      subject = 'Email change requested on your WCC Media account';
+      subject = 'A change to your email address was requested';
       l = {
         greeting: hello,
-        paragraphs: [`Someone signed in to your WCC Media account asked to change its email address to ${d.newEmail ?? 'a new address'}. The change only happens once the new address is confirmed.`],
-        disclaimer: 'If this was not you, change your password now and contact an administrator.',
+        paragraphs: [`Just letting you know: someone signed in to your account asked to change its email address to ${d.newEmail ?? 'a new address'}. Nothing changes until the new address is confirmed.`],
+        disclaimer: 'If this wasn’t you, please change your password and reply to this email so we can help.',
       };
       break;
     case 'email-changed':
-      subject = 'Your WCC Media email address was changed';
+      subject = 'Your email address has been updated';
       l = {
         greeting: hello,
-        paragraphs: [`The email address on your WCC Media account was changed to ${d.newEmail ?? 'a new address'}. Use the new address to sign in from now on.`],
-        disclaimer: 'If you did not make this change, contact an administrator immediately.',
+        paragraphs: [`Your account now uses ${d.newEmail ?? 'your new address'}. Please use it next time you sign in.`],
+        disclaimer: 'If you didn’t make this change, please reply to this email straight away so we can help.',
       };
       break;
     case 'account-approved':
-      subject = 'Your WCC Media account is ready';
+      subject = 'You’re all set';
       l = {
         greeting: hello,
-        paragraphs: [`Your account has been approved${d.role ? ` as ${d.role}` : ''}. You can now sign in with the email and password you chose.`],
+        paragraphs: [`Good news: your account${d.role ? ` as ${d.role.toLowerCase()}` : ''} has been approved. You can now sign in with your phone number (or this email) and the password you chose.`, 'Welcome aboard. We’re glad to have you.'],
         cta: { label: 'Sign in', href: d.link ?? env.WEB_ORIGIN },
       };
       break;
     case 'monthly-report':
-      subject = `${d.month ?? 'Monthly'} church report`;
+      subject = `How ${d.month ?? 'last month'} went`;
       l = {
         greeting: hello,
         paragraphs: (d.lines ?? '').split('\n').filter(Boolean),
-        cta: { label: 'Open attendance', href: d.link ?? env.WEB_ORIGIN },
-        note: 'Sent on the 1st of every month to Super Admins.',
+        cta: { label: 'See the full picture', href: d.link ?? env.WEB_ORIGIN },
+        note: 'You get this summary on the 1st of every month.',
       };
       break;
     case 'export-ready':
       subject = `Your download is ready: ${d.title ?? ''}`;
       l = {
-        paragraphs: [`The ZIP file for “${d.title ?? 'your selection'}” is ready to download.`],
-        cta: { label: 'Open downloads', href: d.link ?? env.WEB_ORIGIN },
-        note: 'The download will be available for 24 hours.',
+        greeting: hello,
+        paragraphs: [`The photos and videos from “${d.title ?? 'your selection'}” are ready to download.`],
+        cta: { label: 'Download now', href: d.link ?? env.WEB_ORIGIN },
+        note: 'The download stays available for 24 hours.',
       };
       break;
   }

@@ -1,5 +1,8 @@
 import { cursorArgs, pageOf, pageSize } from '../common/pagination';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ENV, Env } from '../config/env';
+import { QueueService } from '../queue/queue.service';
+import { randomToken, sha256 } from '../common/crypto';
 import { randomInt } from 'node:crypto';
 import { PasswordService } from '../auth/password.service';
 import { Prisma, Role, UserStatus } from '@wcc/db';
@@ -35,6 +38,8 @@ export class UsersService {
     private readonly sessions: SessionService,
     private readonly me: MeService,
     private readonly passwords: PasswordService,
+    private readonly queue: QueueService,
+    @Inject(ENV) private readonly env: Env,
   ) {}
 
   /** 10 at a time, active first then by name. */
@@ -117,14 +122,37 @@ export class UsersService {
   }
 
   /**
-   * Super Admin: gives someone a one-time temporary password (e.g. a member who joined with a
-   * phone number and has no email to reset it). They're signed out everywhere and must choose
-   * their own password the next time they sign in. Not for other Super Admins.
+   * Super Admin: resets someone's password. Their old password stops working and they're
+   * signed out everywhere. If they have an email address, a link to choose a new password is
+   * sent there. If not (members who joined with their phone), the admin gets a one-time
+   * temporary password to pass on, and they choose their own on next sign-in.
+   * Not for other Super Admins.
    */
-  async resetPassword(user: AuthUser, id: string, meta: ReqMeta): Promise<{ temporaryPassword: string; fullName: string; phone: string | null }> {
+  async resetPassword(
+    user: AuthUser,
+    id: string,
+    meta: ReqMeta,
+  ): Promise<{ method: 'email'; email: string; fullName: string } | { method: 'temporary'; temporaryPassword: string; fullName: string; phone: string | null }> {
     const target = await this.loadTarget(user, id);
     if (target.role === 'SUPER_ADMIN') throw forbidden('Super Admins reset their own password by email');
     if (target.status === 'PENDING_APPROVAL') throw badRequest('PENDING', 'Approve this account first');
+    await this.prisma.passwordResetToken.updateMany({ where: { userId: id, usedAt: null }, data: { usedAt: new Date() } });
+    if (target.email) {
+      const token = randomToken();
+      await this.prisma.$transaction([
+        // A random password nobody knows, so the old one stops working right away.
+        this.prisma.user.update({ where: { id }, data: { passwordHash: await this.passwords.hash(randomToken()), passwordChangedAt: new Date(), mustChangePassword: false, failedLoginCount: 0, lockedUntil: null } }),
+        this.prisma.passwordResetToken.create({ data: { userId: id, tokenHash: sha256(token), expiresAt: new Date(Date.now() + 24 * 3600_000) } }),
+      ]);
+      await this.sessions.revokeAllForUser(id, 'ADMIN');
+      await this.queue.mail({
+        to: target.email,
+        template: 'password-reset-admin',
+        data: { name: target.fullName.split(' ')[0] ?? '', inviter: user.fullName, link: `${this.env.WEB_ORIGIN}/reset-password/${token}` },
+      });
+      await this.audit.record({ actorId: user.id, action: 'PASSWORD_RESET_BY_ADMIN', entityType: 'USER', entityId: id, metadata: { method: 'email' }, meta });
+      return { method: 'email', email: target.email, fullName: target.fullName };
+    }
     // No look-alike characters (0/O, 1/l/I), so it's easy to read out or type.
     const abc = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
     const part = () => Array.from({ length: 4 }, () => abc[randomInt(abc.length)]).join('');
@@ -134,9 +162,8 @@ export class UsersService {
       data: { passwordHash: await this.passwords.hash(temporaryPassword), passwordChangedAt: new Date(), mustChangePassword: true, failedLoginCount: 0, lockedUntil: null },
     });
     await this.sessions.revokeAllForUser(id, 'ADMIN');
-    await this.prisma.passwordResetToken.updateMany({ where: { userId: id, usedAt: null }, data: { usedAt: new Date() } });
-    await this.audit.record({ actorId: user.id, action: 'PASSWORD_RESET_BY_ADMIN', entityType: 'USER', entityId: id, meta });
-    return { temporaryPassword, fullName: target.fullName, phone: target.phone };
+    await this.audit.record({ actorId: user.id, action: 'PASSWORD_RESET_BY_ADMIN', entityType: 'USER', entityId: id, metadata: { method: 'temporary' }, meta });
+    return { method: 'temporary', temporaryPassword, fullName: target.fullName, phone: target.phone };
   }
 
   async revokeSessions(user: AuthUser, id: string, meta: ReqMeta) {

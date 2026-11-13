@@ -16,7 +16,7 @@ import type { ReqMeta } from '../common/decorators';
 import type { AuthUser } from '../common/auth-user';
 import type { LoginDto } from './dto/auth.dto';
 
-const INVALID = () => unauthorized('INVALID_CREDENTIALS', 'Invalid email or password');
+const INVALID = () => unauthorized('INVALID_CREDENTIALS', 'That email, phone number or password doesn’t match our records. Please try again.');
 const LOCK_AFTER = 5;
 const LOCK_MINUTES = 15;
 
@@ -44,7 +44,7 @@ export class AuthService {
   async login(dto: LoginDto, meta: ReqMeta): Promise<{ tokens: IssuedTokens; userId: string }> {
     // 5 attempts / 15 min per email, on top of the per-IP throttle (§13).
     if (!(await this.hit(`login:email:${sha256(dto.email)}`, LOCK_AFTER * 2, LOCK_MINUTES * 60)))
-      throw new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', 'Too many attempts. Try again later.');
+      throw new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', 'That’s a few too many tries. Please wait 15 minutes and try again, or reset your password.');
 
     const phone = dto.email.includes('@') ? null : normalizePhone(dto.email);
     const user = phone ? await this.prisma.user.findUnique({ where: { phone } }) : await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -158,7 +158,7 @@ export class AuthService {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     if (!(await this.passwords.verify(u.passwordHash, password))) throw badRequest('WRONG_PASSWORD', 'Password is incorrect');
     if (newEmail === u.email?.toLowerCase()) throw badRequest('SAME_EMAIL', 'That is already your email address');
-    if (!(await this.hit(`email-change:${u.id}`, 5, 3600))) throw new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', 'Too many attempts. Try again in an hour.');
+    if (!(await this.hit(`email-change:${u.id}`, 5, 3600))) throw new AppException(HttpStatus.TOO_MANY_REQUESTS, 'TOO_MANY_REQUESTS', 'That’s a few too many tries. Please try again in an hour.');
     if (await this.prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } }))
       throw badRequest('EMAIL_TAKEN', 'That email address is already used by another account');
     const token = randomToken();

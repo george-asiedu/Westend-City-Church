@@ -151,7 +151,7 @@ export class ChurchService {
 
   private async notifyAssignee(user: AuthUser, assigneeId: string | null, name: string, reason: string) {
     if (!assigneeId || assigneeId === user.id) return;
-    await this.queue.push({ userIds: [assigneeId], kind: 'reminder', payload: { title: `Follow up: ${name}`, body: `${user.fullName} asked you to follow up. ${reason}`, url: '/church/follow-ups', tag: 'follow-up' } });
+    await this.queue.push({ userIds: [assigneeId], kind: 'reminder', payload: { title: `Could you check on ${name}?`, body: `${user.fullName} asked if you could reach out. ${reason}`, url: '/church/follow-ups', tag: 'follow-up' } });
   }
 
   async updateFollowUp(user: AuthUser, id: string, dto: { status?: FollowUpStatus; note?: string; assignedToId?: string | null; dueOn?: string | null }, meta: ReqMeta) {
@@ -520,7 +520,7 @@ export class ChurchService {
     const a = await this.prisma.announcement.findUniqueOrThrow({ where: { id }, include: { groups: true } });
     const userIds = await this.audienceUsers(a.audience, a.groups.map((g) => g.groupId));
     const body = a.body.length > 160 ? `${a.body.slice(0, 157)}…` : a.body;
-    await this.queue.push({ userIds, kind: 'announcement', payload: { title: `📣 ${a.title}`, body, url: '/announcements', tag: `ann-${a.id}`.slice(0, 32) } });
+    await this.queue.push({ userIds, kind: 'announcement', payload: { title: a.title, body, url: '/announcements', tag: `ann-${a.id}`.slice(0, 32) } });
     return userIds.length;
   }
 

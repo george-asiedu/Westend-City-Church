@@ -26,14 +26,14 @@ describe('birthday messages', () => {
   const kofi = { id: 'm2', fullName: 'Kofi Owusu', groupNames: ['Media'], recipientIds: ['pastor', 'media-lead'], selfUserId: null };
   const m = birthdayMessages([ama, kofi], '2026-11-19');
   it('the birthday person gets a personal greeting, not a "birthday today" notice', () => {
-    expect(m.get('ama-user')!.title).toBe('Happy birthday, Ama! 🎉');
+    expect(m.get('ama-user')!.title).toBe('Happy birthday, Ama!');
   });
   it('one person in your groups', () => {
-    expect(m.get('friend')).toMatchObject({ title: '🎂 It’s Ama Mensah’s birthday today', url: '/church/members/m1' });
+    expect(m.get('friend')).toMatchObject({ title: 'It’s Ama Mensah’s birthday today', url: '/church/members/m1' });
     expect(m.get('friend')!.body).toContain('Ama Mensah (Glory Basonta)');
   });
   it('several people: one notification listing them', () => {
-    expect(m.get('pastor')!.title).toBe('🎂 2 birthdays today');
+    expect(m.get('pastor')!.title).toBe('2 birthdays today');
     expect(m.get('pastor')!.body).toContain('Kofi Owusu (Media)');
   });
   it('nobody else is told', () => {

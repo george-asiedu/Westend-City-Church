@@ -57,8 +57,8 @@ export async function notify(job: Job): Promise<unknown> {
               if (u) {
                 const prev = msgs.get(u);
                 msgs.set(u, {
-                  title: `Please record ${day}’s attendance`,
-                  body: prev ? `${prev.body}\n${b.name}` : `A Super Admin is asking for ${b.name}’s attendance for ${day}.`,
+                  title: `Could you record ${day}’s attendance?`,
+                  body: prev ? `${prev.body}\n${b.name}` : `The church office is still waiting for ${b.name}’s numbers for ${day}. Thank you!`,
                   url: '/church/attendance/new',
                   tag: `remind-${date}`,
                 });
@@ -79,7 +79,7 @@ export async function notify(job: Job): Promise<unknown> {
       return monthlyReport((job.data as { month?: string })?.month);
     case NOTIFY_JOBS.TEST: {
       const { userId } = job.data as NotifyTestJob;
-      return pushToUsers([userId], { title: 'Notifications are on', body: 'You’ll get attendance reminders and weekend numbers here.', url: '/account', tag: 'test' }, 'test');
+      return pushToUsers([userId], { title: 'You’re all set', body: 'Notifications are working. We’ll let you know about reminders, birthdays and church news here.', url: '/account', tag: 'test' }, 'test');
     }
     default:
       throw new Error(`unknown notify job ${job.name}`);
@@ -147,7 +147,7 @@ async function announcementsDue() {
     if (a.expiresAt && a.expiresAt <= new Date()) continue;
     const userIds = await announcementAudience(a.audience, a.groups.map((g) => g.groupId));
     const body = a.body.length > 160 ? `${a.body.slice(0, 157)}…` : a.body;
-    sent += (await pushToUsers(userIds, { title: `📣 ${a.title}`, body, url: '/announcements', tag: `ann-${a.id}`.slice(0, 32) }, 'announcement')).sent;
+    sent += (await pushToUsers(userIds, { title: a.title, body, url: '/announcements', tag: `ann-${a.id}`.slice(0, 32) }, 'announcement')).sent;
   }
   if (due.length) log.info({ announcements: due.length, sent }, 'scheduled announcements sent');
   return { announcements: due.length, sent };
@@ -170,7 +170,7 @@ async function rosterReminders(date?: string) {
     const what = [s.role?.name, s.service].filter(Boolean).join(', ') || 'on duty';
     const line = `${s.group.name}: ${what}`;
     const prev = msgs.get(u);
-    msgs.set(u, { title: 'You’re on the rota tomorrow', body: prev ? `${prev.body}\n${line}` : line, url: '/me/church', tag: `rota-${today}` });
+    msgs.set(u, { title: 'You’re serving tomorrow', body: prev ? `${prev.body}\n${line}` : `${line}\nThank you for serving!`, url: '/me/church', tag: `rota-${today}` });
   }
   const r = await sendAll(msgs, 'reminder');
   log.info({ date: today, slots: slots.length, ...r }, 'rota reminders sent');
@@ -199,13 +199,15 @@ export async function monthlyReport(month?: string) {
   const serviceTotal = services.reduce((a, s) => a + (s.headcount ?? 0), 0);
   const sundays = new Set(services.map((s) => s.date.toISOString().slice(0, 10))).size;
   const lines = [
-    `Here is ${label} at Westend City Church.`,
-    `Church services: ${services.length} recorded, ${serviceTotal} people in total${sundays ? ` (about ${Math.round(serviceTotal / sundays)} per service day)` : ''}.`,
-    `Group meetings: ${meetings.length} recorded, ${present} member attendances${meetings.length ? ` (about ${Math.round(present / meetings.length)} per meeting)` : ''}.`,
-    `New members: ${newMembers}. Active members now: ${active}.`,
-    `New people: ${guests} brought by members, ${cards} visitor cards filled in.`,
-    `Follow-ups: ${followUpsDone} completed, ${followUpsOpen} still open.`,
+    `Here’s a look back at ${label} at Westend City Church.`,
+    `Church services: ${services.length} recorded, with ${serviceTotal} people in total${sundays ? ` (about ${Math.round(serviceTotal / sundays)} each service day)` : ''}.`,
+    `Group meetings: ${meetings.length} held, with ${present} member attendances${meetings.length ? ` (about ${Math.round(present / meetings.length)} at each)` : ''}.`,
+    `We welcomed ${newMembers} new member${newMembers === 1 ? '' : 's'}, and ${active} members are active now.`,
+    `New faces: ${guests} brought by members and ${cards} welcome card${cards === 1 ? '' : 's'} filled in.`,
+    `Follow-ups: ${followUpsDone} done and ${followUpsOpen} still waiting for a call or visit.`,
+    'Thank you for all you do.',
   ];
+
   const admins = await prisma.user.findMany({ where: { role: 'SUPER_ADMIN', status: 'ACTIVE' }, select: { id: true, email: true, fullName: true } });
   for (const a of admins.filter((x) => x.email))
     await queues.mail.add(
@@ -213,7 +215,7 @@ export async function monthlyReport(month?: string) {
       { to: a.email, template: 'monthly-report', data: { name: a.fullName.split(' ')[0] ?? '', month: label, lines: lines.join('\n'), link: `${env.WEB_ORIGIN}/church/attendance` } },
       { attempts: 3, removeOnComplete: 500 },
     );
-  await pushToUsers(admins.map((a) => a.id), { title: `${label} report`, body: `${lines[1]} ${lines[3]}`, url: '/church/attendance', tag: 'monthly' }, 'stats');
+  await pushToUsers(admins.map((a) => a.id), { title: `How ${label} went`, body: `${lines[1]} ${lines[3]}`, url: '/church/attendance', tag: 'monthly' }, 'stats');
   log.info({ month: label, admins: admins.length }, 'monthly report sent');
   return { month: label, admins: admins.length, lines };
 }

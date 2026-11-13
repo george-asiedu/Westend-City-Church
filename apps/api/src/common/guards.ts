@@ -46,7 +46,7 @@ export class CsrfGuard implements CanActivate {
     const header = req.headers['x-csrf-token'];
     const cookie = req.cookies?.[CSRF_COOKIE] as string | undefined;
     if (typeof header !== 'string' || !cookie || !safeEqual(header, cookie)) {
-      throw new AppException(HttpStatus.FORBIDDEN, 'CSRF_FAILED', 'Security token missing or invalid. Reload the page.');
+      throw new AppException(HttpStatus.FORBIDDEN, 'CSRF_FAILED', 'Your session needs a quick refresh. Please reload the page and try again.');
     }
     return true;
   }

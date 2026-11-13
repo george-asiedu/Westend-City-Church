@@ -375,7 +375,7 @@ export function BirthdaysCard({ groupId }: { groupId: string }) {
             <li key={b.id} className={cn('flex min-w-0 items-center gap-2 py-2', b.daysAway === 0 && 'rounded-lg bg-brand/5 px-2')}>
               <a href={`/church/members/${b.id}`} className="min-w-0 flex-1">
                 <p className="truncate font-medium hover:text-brand">
-                  {b.fullName} {b.daysAway === 0 && '🎂'}
+                  {b.fullName}
                 </p>
                 <p className="truncate text-xs text-muted">
                   {when(b.daysAway)} · {new Date(`${b.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
@@ -384,7 +384,7 @@ export function BirthdaysCard({ groupId }: { groupId: string }) {
               </a>
               {b.phone && (
                 <a
-                  href={whatsappLink(b.phone, `Happy birthday ${b.fullName.split(' ')[0]}! 🎉`)}
+                  href={whatsappLink(b.phone, `Happy birthday, ${b.fullName.split(' ')[0]}! Wishing you a blessed year ahead.`)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="shrink-0 rounded-lg p-2 text-brand hover:bg-surface-2"

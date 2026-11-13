@@ -26,13 +26,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let code = 'INTERNAL_ERROR';
-    let message = 'Something went wrong';
+    let message = 'Sorry, something went wrong on our side. Please try again in a moment.';
     let details: unknown;
 
     if (exception instanceof ThrottlerException) {
       status = 429;
       code = 'TOO_MANY_REQUESTS';
-      message = 'Too many requests. Please wait a moment.';
+      message = 'You’re going a little fast. Please wait a moment and try again.';
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const body = exception.getResponse();
@@ -43,7 +43,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         if (b.code) code = b.code;
         if (Array.isArray(b.message)) {
           code = b.code ?? 'VALIDATION_FAILED';
-          message = 'Some fields are invalid';
+          // Our own messages are written for people ("Enter your 10-digit phone number…"); show the first one.
+          const first = b.message.find((m) => /^(Enter|Choose|Please|Phone|Your|That)/.test(m));
+          message = first ?? 'Something in the form doesn’t look quite right. Please check it and try again.';
           details = b.message;
         } else if (b.message) message = b.message;
         if (b.details) details = b.details;
@@ -52,11 +54,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (exception.code === 'P2002') {
         status = 409;
         code = 'CONFLICT';
-        message = 'That already exists';
+        message = 'That’s already been added';
       } else if (exception.code === 'P2025') {
         status = 404;
         code = 'NOT_FOUND';
-        message = 'Not found';
+        message = 'We couldn’t find that. It may have been removed.';
       } else this.logger.error(exception);
     } else {
       this.logger.error(exception instanceof Error ? exception.stack : exception);

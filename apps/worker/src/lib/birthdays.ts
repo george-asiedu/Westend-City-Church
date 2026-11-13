@@ -38,7 +38,7 @@ export function birthdayMessages(people: BirthdayPerson[], date: string): Map<st
   for (const p of people) {
     if (p.selfUserId) {
       out.set(p.selfUserId, {
-        title: `Happy birthday, ${p.fullName.split(' ')[0]}! 🎉`,
+        title: `Happy birthday, ${p.fullName.split(' ')[0]}!`,
         body: 'Everyone at Westend City Church is celebrating you today. Have a blessed day!',
         url: `/church/members/${p.id}`,
         tag: `birthday-self-${date}`,
@@ -56,7 +56,7 @@ export function birthdayMessages(people: BirthdayPerson[], date: string): Map<st
     const lines = list.slice(0, 5).map((p) => (p.groupNames.length ? `${p.fullName} (${p.groupNames[0]})` : p.fullName));
     if (list.length > 5) lines.push(`and ${list.length - 5} more`);
     out.set(userId, {
-      title: list.length === 1 ? `🎂 It’s ${list[0]!.fullName}’s birthday today` : `🎂 ${list.length} birthdays today`,
+      title: list.length === 1 ? `It’s ${list[0]!.fullName}’s birthday today` : `${list.length} birthdays today`,
       body: `${lines.join('\n')}\nSend them a message to celebrate!`,
       url: list.length === 1 ? `/church/members/${list[0]!.id}` : '/church/members',
       tag: `birthdays-${date}`,

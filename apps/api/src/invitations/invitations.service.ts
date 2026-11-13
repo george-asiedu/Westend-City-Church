@@ -276,7 +276,7 @@ export class InvitationsService {
       await this.queue.push({
         userIds: admins.map((a) => a.id),
         kind: 'reminder',
-        payload: { title: `New ${ROLE_LABELS[l.role].toLowerCase()} to approve`, body: `${user.fullName} signed up with “${l.label}”.`, url: '/admin/join-links', tag: 'join-approval' },
+        payload: { title: `${user.fullName} would like to join as a ${ROLE_LABELS[l.role].toLowerCase()}`, body: `They signed up with “${l.label}”. Tap to review.`, url: '/admin/join-links', tag: 'join-approval' },
       });
     }
     return { status };

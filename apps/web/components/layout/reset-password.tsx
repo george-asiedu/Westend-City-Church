@@ -14,28 +14,29 @@ import { whatsappLink } from '@/lib/membership';
  * number and can't reset by email). Shown once; they choose their own when they next sign in.
  */
 export function ResetPasswordButton({ userId, name, size = 'sm', variant = 'outline' }: { userId: string; name: string; size?: 'sm' | 'md'; variant?: 'outline' | 'ghost' }) {
-  const [result, setResult] = useState<{ temporaryPassword: string; fullName: string; phone: string | null } | null>(null);
+  type Result = { method: 'email'; email: string; fullName: string } | { method: 'temporary'; temporaryPassword: string; fullName: string; phone: string | null };
+  const [result, setResult] = useState<Result | null>(null);
   const first = name.split(' ')[0];
   const message = (p: string) =>
-    `Hello ${first}, your WCC app password has been reset. Sign in at ${window.location.origin}/login with your phone number and this temporary password: ${p}\nYou'll be asked to choose your own password.`;
+    `Hello ${first}, I’ve reset your password for the Westend City Church app.\n\nSign in at ${window.location.origin}/login with your phone number and this temporary password: ${p}\n\nThe app will then ask you to choose your own. God bless!`;
   return (
     <>
       <ConfirmButton
         size={size}
         variant={variant}
         title={`Reset ${name}’s password?`}
-        description="They’re signed out everywhere and get a temporary password, which you send them. They choose their own when they next sign in."
+        description="Their old password stops working and they’re signed out everywhere. If they have an email address, we’ll email them a link to choose a new one. If not, you’ll get a temporary password to pass on."
         confirmLabel="Reset password"
         onConfirm={() =>
-          api<{ temporaryPassword: string; fullName: string; phone: string | null }>(`/users/${userId}/reset-password`, { method: 'POST' })
-            .then(setResult)
+          api<Result>(`/users/${userId}/reset-password`, { method: 'POST' })
+            .then((r) => (r.method === 'email' ? toast.success(`Done. We’ve emailed ${first} a link to choose a new password.`, { duration: 8000 }) : setResult(r)))
             .catch((e) => toast.error(errorMessage(e)))
         }
       >
         <KeyRound className="h-4 w-4" /> Reset password
       </ConfirmButton>
-      <Dialog open={!!result} onOpenChange={(o) => !o && setResult(null)} title="Temporary password" description={`Send this to ${name}. It’s only shown now.`}>
-        {result && (
+      <Dialog open={result?.method === 'temporary'} onOpenChange={(o) => !o && setResult(null)} title="Temporary password" description={`${first} doesn’t have an email address, so please send this to them. It’s only shown now.`}>
+        {result?.method === 'temporary' && (
           <div className="space-y-4">
             <p className="select-all rounded-lg bg-surface-2 p-4 text-center font-mono text-2xl tracking-wider" data-temp-password>
               {result.temporaryPassword}
@@ -60,7 +61,7 @@ export function ResetPasswordButton({ userId, name, size = 'sm', variant = 'outl
                 <Copy className="h-4 w-4" /> Copy message
               </Button>
             </div>
-            <p className="text-center text-xs text-muted">They sign in with {result.phone ? `${result.phone} (or their email)` : 'their email'} and this password, then choose their own.</p>
+            <p className="text-center text-xs text-muted">They sign in with {result.phone ?? 'their phone number'} and this password, then choose their own.</p>
           </div>
         )}
       </Dialog>

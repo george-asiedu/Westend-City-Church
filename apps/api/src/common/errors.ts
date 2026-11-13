@@ -7,11 +7,11 @@ export class AppException extends HttpException {
   }
 }
 
-export const notFound = (what = 'Resource') => new AppException(HttpStatus.NOT_FOUND, 'NOT_FOUND', `${what} not found`);
-export const forbidden = (message = 'You do not have permission to do that') =>
+export const notFound = (what = 'Resource') => new AppException(HttpStatus.NOT_FOUND, 'NOT_FOUND', `We couldn’t find that ${what.toLowerCase()}. It may have been removed.`);
+export const forbidden = (message = 'Sorry, you don’t have access to that') =>
   new AppException(HttpStatus.FORBIDDEN, 'FORBIDDEN', message);
 export const badRequest = (code: string, message: string, details?: unknown) =>
   new AppException(HttpStatus.BAD_REQUEST, code, message, details);
 export const conflict = (code: string, message: string) => new AppException(HttpStatus.CONFLICT, code, message);
-export const unauthorized = (code = 'UNAUTHORIZED', message = 'Please sign in') =>
+export const unauthorized = (code = 'UNAUTHORIZED', message = 'Please sign in to continue') =>
   new AppException(HttpStatus.UNAUTHORIZED, code, message);

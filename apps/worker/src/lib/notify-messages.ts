@@ -40,7 +40,7 @@ export function reminderMessages(r: DayRollup): Map<string, PushPayload> {
   }
   const out = new Map<string, PushPayload>();
   for (const [userId, lines] of inbox.entries())
-    out.set(userId, { title: `Reminder: record ${day}’s attendance`, body: lines.join('\n'), url: '/church/attendance/new', tag: `reminder-${r.date}` });
+    out.set(userId, { title: `A gentle reminder about ${day}’s attendance`, body: lines.join('\n'), url: '/church/attendance/new', tag: `reminder-${r.date}` });
   return out;
 }
 
