@@ -39,7 +39,7 @@ export interface MemberDetail extends MemberDto {
   }>;
   brought: GuestDto[];
   /** Their app login, if they have one. */
-  account: { status: string; lastLoginAt: string | null; twoFactor: boolean } | null;
+  account: { id: string; mustChangePassword: boolean; status: string; lastLoginAt: string | null; twoFactor: boolean } | null;
   /** A pending invitation to the app. */
   invitedAt: string | null;
 }

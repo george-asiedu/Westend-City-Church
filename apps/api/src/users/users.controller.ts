@@ -74,6 +74,12 @@ export class UsersController {
     return this.users.remove(user, id, meta);
   }
 
+  @Post(':id/reset-password')
+  @HttpCode(200)
+  resetPassword(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() meta: ReqMeta) {
+    return this.users.resetPassword(user, id, meta);
+  }
+
   @Post(':id/revoke-sessions')
   @HttpCode(200)
   revokeSessions(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() meta: ReqMeta) {

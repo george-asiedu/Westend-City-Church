@@ -125,19 +125,26 @@ function ChangeEmail({ me }: { me: MeResponse }) {
   );
 }
 
-function ChangePassword() {
+function ChangePassword({ forced }: { forced?: boolean }) {
+  const qc = useQueryClient();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState<string | null>(null);
   const [key, setKey] = useState(0);
   const change = useMutation({
     mutationFn: () => api('/auth/change-password', { method: 'POST', body: { currentPassword: current, newPassword: next } }),
-    onSuccess: () => (toast.success('Password changed. Other devices were signed out.'), setCurrent(''), setKey((k) => k + 1)),
+    onSuccess: () => (
+      toast.success(forced ? 'Thanks! Your new password is set.' : 'Password changed. Other devices were signed out.'),
+      setCurrent(''),
+      setKey((k) => k + 1),
+      void qc.invalidateQueries({ queryKey: qk.me })
+    ),
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
-    <Card className="space-y-4 p-5">
-      <h2 className="font-semibold">Password</h2>
-      <Field label="Current password" htmlFor="cur">
+    <Card className={`space-y-4 p-5 ${forced ? 'ring-2 ring-warning lg:col-span-2' : ''}`} data-change-password>
+      <h2 className="font-semibold">{forced ? 'Choose your own password' : 'Password'}</h2>
+      {forced && <p className="rounded-lg bg-warning/15 p-3 text-sm text-warning">You signed in with a temporary password from a church admin. Please choose your own to continue.</p>}
+      <Field label={forced ? 'Temporary password' : 'Current password'} htmlFor="cur">
         <PasswordInput id="cur" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
       </Field>
       <NewPasswordFields key={key} onChange={setNext} />
@@ -347,10 +354,11 @@ function AccountInner() {
     <>
       <PageHeader title="Account & security" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+        {me.data.mustChangePassword && <ChangePassword forced />}
         <TwoFactor me={me.data} highlight={params.get('setup2fa') === '1'} />
         <Profile me={me.data} />
         <ChangeEmail me={me.data} />
-        <ChangePassword />
+        {!me.data.mustChangePassword && <ChangePassword />}
         {me.data.permissions.canViewMembership && <NotificationsCard />}
         <Sessions />
       </div>

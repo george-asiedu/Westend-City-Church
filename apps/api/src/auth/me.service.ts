@@ -30,6 +30,7 @@ export class MeService {
       status: u.status,
       totpEnabled: u.totpEnabled,
       memberId: u.memberId,
+      mustChangePassword: u.mustChangePassword,
       mustEnable2fa: this.env.REQUIRE_2FA_FOR_ADMINS && isAdmin && !u.totpEnabled,
       grants: u.categoryAccess.map((g) => ({ categoryId: g.categoryId, canView: g.canView, canUpload: g.canUpload, canManage: g.canManage })),
       permissions: {

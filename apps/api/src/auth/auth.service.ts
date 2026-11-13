@@ -137,7 +137,7 @@ export class AuthService {
       this.prisma.passwordResetToken.update({ where: { id: row.id }, data: { usedAt: new Date() } }),
       this.prisma.user.update({
         where: { id: row.userId },
-        data: { passwordHash: hash, passwordChangedAt: new Date(), failedLoginCount: 0, lockedUntil: null },
+        data: { passwordHash: hash, passwordChangedAt: new Date(), failedLoginCount: 0, lockedUntil: null, mustChangePassword: false },
       }),
     ]);
     await this.sessions.revokeAllForUser(row.userId, 'PASSWORD_CHANGE');
@@ -148,7 +148,7 @@ export class AuthService {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     if (!(await this.passwords.verify(u.passwordHash, current))) throw badRequest('WRONG_PASSWORD', 'Current password is incorrect');
     await this.passwords.assertStrong(next, [u.email ?? '', u.phone ?? '', u.fullName]);
-    await this.prisma.user.update({ where: { id: u.id }, data: { passwordHash: await this.passwords.hash(next), passwordChangedAt: new Date() } });
+    await this.prisma.user.update({ where: { id: u.id }, data: { passwordHash: await this.passwords.hash(next), passwordChangedAt: new Date(), mustChangePassword: false } });
     await this.sessions.revokeAllForUser(u.id, 'PASSWORD_CHANGE', user.sid);
     await this.audit.record({ actorId: u.id, action: 'PASSWORD_CHANGED', entityType: 'USER', entityId: u.id, meta });
   }

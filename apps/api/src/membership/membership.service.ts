@@ -743,12 +743,12 @@ export class MembershipService {
     ]);
     const seen = await this.lastSeen([id]);
     const [account, invite] = await Promise.all([
-      this.prisma.user.findFirst({ where: { memberId: id }, select: { status: true, lastLoginAt: true, totpEnabled: true } }),
+      this.prisma.user.findFirst({ where: { memberId: id }, select: { id: true, status: true, lastLoginAt: true, totpEnabled: true, mustChangePassword: true } }),
       this.prisma.invitation.findFirst({ where: { memberId: id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } }, select: { createdAt: true } }),
     ]);
     return {
       ...this.toMemberDto(user, m, seen.get(id) ?? null),
-      account: account ? { status: account.status, lastLoginAt: account.lastLoginAt?.toISOString() ?? null, twoFactor: account.totpEnabled } : null,
+      account: account ? { id: account.id, mustChangePassword: account.mustChangePassword, status: account.status, lastLoginAt: account.lastLoginAt?.toISOString() ?? null, twoFactor: account.totpEnabled } : null,
       invitedAt: invite?.createdAt.toISOString() ?? null,
       broughtBy: m.convertedFrom?.broughtBy ?? null,
       history: history.map((h) => ({

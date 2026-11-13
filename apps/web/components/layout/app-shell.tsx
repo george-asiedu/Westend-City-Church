@@ -79,6 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (me.data?.mustEnable2fa && !pathname.startsWith('/account')) router.replace('/account?setup2fa=1');
+    else if (me.data?.mustChangePassword && !pathname.startsWith('/account')) router.replace('/account?changePassword=1');
   }, [me.data, pathname, router]);
 
   if (me.isLoading || !me.data) return <PageLoader />;

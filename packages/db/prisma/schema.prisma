@@ -63,29 +63,31 @@ enum ExportStatus {
 // ───────────────────────── Identity ─────────────────────────
 
 model User {
-  id                String     @id @default(uuid()) @db.Uuid
+  id                 String     @id @default(uuid()) @db.Uuid
   /// Optional for members who joined with a QR code (they sign in with their phone).
-  email             String?    @unique @db.Citext
-  fullName          String     @db.VarChar(120)
-  title             String?    @db.VarChar(40)
+  email              String?    @unique @db.Citext
+  fullName           String     @db.VarChar(120)
+  title              String?    @db.VarChar(40)
   /// 10 digits (0XXXXXXXXX); also a sign-in name.
-  phone             String?    @unique @db.VarChar(30)
-  role              Role       @default(VIEWER)
-  status            UserStatus @default(INVITED)
-  passwordHash      String?
-  passwordChangedAt DateTime?
-  totpSecretEnc     String?
-  totpEnabled       Boolean    @default(false)
-  failedLoginCount  Int        @default(0)
-  lockedUntil       DateTime?
-  lastLoginAt       DateTime?
-  avatarKey         String?
+  phone              String?    @unique @db.VarChar(30)
+  role               Role       @default(VIEWER)
+  status             UserStatus @default(INVITED)
+  passwordHash       String?
+  passwordChangedAt  DateTime?
+  /// Set when a Super Admin gives them a temporary password: they choose their own on next sign-in.
+  mustChangePassword Boolean    @default(false)
+  totpSecretEnc      String?
+  totpEnabled        Boolean    @default(false)
+  failedLoginCount   Int        @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  avatarKey          String?
   /// Push notification preferences.
-  notifyReminders   Boolean    @default(true)
-  notifyStats       Boolean    @default(true)
-  notifyBirthdays   Boolean    @default(true)
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  notifyReminders    Boolean    @default(true)
+  notifyStats        Boolean    @default(true)
+  notifyBirthdays    Boolean    @default(true)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 
   sessions          Session[]
   categoryAccess    UserCategoryAccess[]

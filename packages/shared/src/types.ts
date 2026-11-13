@@ -23,6 +23,8 @@ export interface MeResponse {
   totpEnabled: boolean;
   /** Linked member record (member accounts). */
   memberId: string | null;
+  /** Signed in with a temporary password from a Super Admin: choose a new one first. */
+  mustChangePassword: boolean;
   mustEnable2fa: boolean;
   grants: CategoryGrant[];
   permissions: {

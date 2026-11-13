@@ -15,6 +15,7 @@ import { qk, useCategories, useMe } from '@/lib/queries';
 import { formatDateTime } from '@/lib/utils';
 import { useCursorList } from '@/lib/membership';
 import { Pager } from '@/components/ui/pager';
+import { ResetPasswordButton } from '@/components/layout/reset-password';
 
 interface UserRow {
   id: string;
@@ -22,7 +23,7 @@ interface UserRow {
   fullName: string;
   title: string | null;
   role: Role;
-  status: 'INVITED' | 'ACTIVE' | 'SUSPENDED';
+  status: 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'PENDING_APPROVAL';
   totpEnabled: boolean;
   lastLoginAt: string | null;
   categoryAccess: GrantRow[];
@@ -128,6 +129,7 @@ function EditUserDialog({ user, onClose }: { user: UserRow | null; onClose: () =
       description={user.email}
       footer={
         <>
+          {user.role !== 'SUPER_ADMIN' && user.status !== 'PENDING_APPROVAL' && <ResetPasswordButton userId={user.id} name={user.fullName} size="md" />}
           <ConfirmButton
             variant="outline"
             title="Sign this user out everywhere?"
