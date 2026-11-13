@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Check, Lock, Minus, Plus, Search, Trash2, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import { GUEST_INTENT_LABELS, MEETING_TYPE_SUGGESTIONS, SERVICE_TYPE_SUGGESTIONS, SUNDAY_SERVICE_TITLES, type AttendanceSheetDto, type GuestDto } from '@wcc/shared';
+import { GUEST_INTENT_LABELS, MEETING_TYPE_SUGGESTIONS, SERVICE_TYPE_SUGGESTIONS, SUNDAY_SERVICE_TITLES, isPerServiceType, type AttendanceSheetDto, type GuestDto } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Input, Select, Textarea } from '@/components/ui/form';
@@ -143,7 +143,7 @@ function ServiceCounts({ sheet: s, onSaved }: { sheet: AttendanceSheetDto; onSav
   });
   const n = (v: string) => Number(v || 0);
   const members = n(f.total) - n(f.visitors) - n(f.converts);
-  const sunday = f.serviceType.trim().toLowerCase() === 'sunday service';
+  const sunday = isPerServiceType(f.serviceType);
   const invalid = members < 0;
   const save = useMutation({
     mutationFn: () =>

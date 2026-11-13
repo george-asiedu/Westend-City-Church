@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, dayRollup, type GroupType, type AttendanceKind, type GuestIntent } from '@wcc/db';
-import { SUNDAY_SERVICE_TITLES } from '@wcc/shared';
+import { SUNDAY_SERVICE_TITLES, isPerServiceType } from '@wcc/shared';
 import type {
   AttendanceSheetDto,
   AttendanceSummaryDto,
@@ -917,8 +917,8 @@ export class MembershipService {
       if (!this.policy.canManageGroup(user, ref(group))) throw forbidden('Only this group’s leaders or a Super Admin can take its attendance');
     } else if (!this.policy.canRecordSunday(user)) throw forbidden('Church services are recorded by the ushers (the service-recording bacenta) or a Super Admin');
     const title = blank(dto.title) ?? null;
-    if (!group && serviceType.toLowerCase() === 'sunday service' && !SUNDAY_SERVICE_TITLES.some((t) => t === title)) {
-      throw badRequest('SERVICE_TITLE', `Choose which Sunday service: ${SUNDAY_SERVICE_TITLES.join(' or ')}`);
+    if (!group && isPerServiceType(serviceType) && !SUNDAY_SERVICE_TITLES.some((t) => t === title)) {
+      throw badRequest('SERVICE_TITLE', `Choose which service: ${SUNDAY_SERVICE_TITLES.join(' or ')}`);
     }
     const date = toDateOnly(dto.date);
     const kind: AttendanceKind = group ? 'GROUP_MEETING' : 'CHURCH_SERVICE';
@@ -1035,8 +1035,8 @@ export class MembershipService {
     if (visitors + converts > total) throw badRequest('COUNTS', 'Visitors and new converts can’t be more than the total');
     const serviceType = dto.serviceType?.trim() || s.serviceType;
     const title = dto.title === undefined ? undefined : (blank(dto.title) ?? null);
-    if (serviceType.toLowerCase() === 'sunday service' && title !== undefined && !SUNDAY_SERVICE_TITLES.some((t) => t === title)) {
-      throw badRequest('SERVICE_TITLE', `Choose which Sunday service: ${SUNDAY_SERVICE_TITLES.join(' or ')}`);
+    if (isPerServiceType(serviceType) && title !== undefined && !SUNDAY_SERVICE_TITLES.some((t) => t === title)) {
+      throw badRequest('SERVICE_TITLE', `Choose which service: ${SUNDAY_SERVICE_TITLES.join(' or ')}`);
     }
     try {
       await this.prisma.attendanceSession.update({

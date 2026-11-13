@@ -61,6 +61,7 @@ export const ROLE_PERMISSION_LABELS: Record<RolePermissionKey, string> = {
 /** Suggestions for what a session is; any text is allowed (max 40 chars). */
 export const SERVICE_TYPE_SUGGESTIONS = [
   'Sunday service',
+  'Swollen Sunday',
   'Midweek service',
   'All-night service',
   'Prayer meeting',
@@ -71,6 +72,9 @@ export const SERVICE_TYPE_SUGGESTIONS = [
 ];
 /** Sunday services are recorded per service. */
 export const SUNDAY_SERVICE_TITLES = ['1st service', '2nd service'] as const;
+/** Service types recorded per service (1st/2nd), with the title chosen from SUNDAY_SERVICE_TITLES. */
+export const PER_SERVICE_TYPES = ['Sunday service', 'Swollen Sunday'] as const;
+export const isPerServiceType = (serviceType: string): boolean => PER_SERVICE_TYPES.some((t) => t.toLowerCase() === serviceType.trim().toLowerCase());
 export const MEETING_TYPE_SUGGESTIONS = ['Meeting', 'Rehearsal', 'Prayer meeting', 'Outreach', 'Retreat', 'Camp'];
 
 export const GUEST_INTENT_LABELS = { VISIT: 'Just visiting', JOINING: 'Wants to join' } as const;
@@ -100,7 +104,7 @@ export const CHURCH_ROLE_SUGGESTIONS = [
   'Shepherd',
   'Constituency overseer',
   'Basonta leader',
-  'Usher',
+  'Head Usher',
   'Choir',
   'Dancer',
   'Media',

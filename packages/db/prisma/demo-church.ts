@@ -163,7 +163,7 @@ async function create(): Promise<void> {
         gender: female ? 'Female' : 'Male',
         dateOfBirth: day(addDays(new Date('1975-01-01'), between(0, 30 * 365))),
         location: pick(['East Legon', 'Spintex Road', 'Madina Zongo Junction', 'Tema Comm. 25', 'Kasoa Old Barrier', 'Adenta', 'Ashaley Botwe', 'Lashibi', 'Haatso', 'Dzorwulu']),
-        churchRole: i % 17 === 0 ? 'Shepherd' : i % 11 === 0 ? 'Basonta leader' : i % 23 === 0 ? 'Usher' : i < 3 ? 'New convert' : 'Member',
+        churchRole: i % 17 === 0 ? 'Shepherd' : i % 11 === 0 ? 'Basonta leader' : i % 23 === 0 ? 'Head Usher' : i < 3 ? 'New convert' : 'Member',
         constituencyId: b.parentId,
         basontaId: b.id,
         joinedOn: day(joined),
@@ -282,7 +282,7 @@ async function create(): Promise<void> {
     head pastor   ${pastors[0]!.email}
     pastor        ${pastors[5]!.email}
     shepherd      ${shepherds[0]!.email}
-    usher         ${shepherds[2]!.email}  (records the Sunday head-counts)
+    ushers' lead  ${shepherds[2]!.email}  (records the Sunday head-counts)
   (Pastors and shepherds don't need 2FA, so they can sign in straight away.)`);
 }
 

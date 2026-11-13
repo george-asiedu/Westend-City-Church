@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { GROUP_TYPE_LABELS, MEETING_TYPE_SUGGESTIONS, SERVICE_TYPE_SUGGESTIONS, SUNDAY_SERVICE_TITLES } from '@wcc/shared';
+import { GROUP_TYPE_LABELS, MEETING_TYPE_SUGGESTIONS, SERVICE_TYPE_SUGGESTIONS, SUNDAY_SERVICE_TITLES, isPerServiceType } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/form';
 import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
@@ -41,7 +41,7 @@ function NewSession() {
   }, [isGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const type = serviceType === '__other' ? custom.trim() : serviceType;
-  const sunday = !isGroup && type.toLowerCase() === 'sunday service';
+  const sunday = !isGroup && isPerServiceType(type);
   useEffect(() => {
     if (sunday && !SUNDAY_SERVICE_TITLES.some((t) => t === title)) setTitle(SUNDAY_SERVICE_TITLES[0]);
   }, [sunday]); // eslint-disable-line react-hooks/exhaustive-deps
