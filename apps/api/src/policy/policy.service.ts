@@ -16,7 +16,14 @@ export interface MediaLike {
 type Principal = Pick<AuthUser, 'id' | 'role' | 'grants'> & Partial<Pick<AuthUser, 'rolePermissions'>>;
 
 const ADMINS: Role[] = ['SUPER_ADMIN', 'MEDIA_ADMIN'];
-const CONTRIBUTORS: Role[] = ['MEDIA_TEAM', 'PASTOR'];
+const CONTRIBUTORS: Role[] = ['MEDIA_TEAM', 'PASTOR', 'SHEPHERD'];
+
+/** A group as policy sees it: who leads it and who shepherds it. */
+export interface GroupRef {
+  pastorId: string | null;
+  createdById: string | null;
+  shepherdIds?: string[];
+}
 
 /**
  * Every authorisation decision lives here (§6.2). Services must call it before
@@ -131,15 +138,24 @@ export class PolicyService {
   }
 
   // ---------------------------------------------------------- membership & attendance
-  // Super Admin and pastors by default; other roles only through role permissions.
+  // Super Admin, pastors and shepherds by default; other roles only through role permissions.
 
   /** Full control over every member, group and attendance record. */
   isMembershipAdmin(u: Principal): boolean {
     return u.role === 'SUPER_ADMIN' || !!u.rolePermissions?.has('MANAGE_MEMBERSHIP');
   }
 
+  private isLeader(u: Principal): boolean {
+    return u.role === 'PASTOR' || u.role === 'SHEPHERD';
+  }
+
   canViewMembership(u: Principal): boolean {
-    return this.isMembershipAdmin(u) || u.role === 'PASTOR' || !!u.rolePermissions?.has('VIEW_MEMBERSHIP');
+    return this.isMembershipAdmin(u) || this.isLeader(u) || !!u.rolePermissions?.has('VIEW_MEMBERSHIP');
+  }
+
+  /** Church-wide charts and reports. Pastors and shepherds see stats for their own groups. */
+  canViewChurchStats(u: Principal): boolean {
+    return this.isMembershipAdmin(u) || !!u.rolePermissions?.has('VIEW_MEMBERSHIP');
   }
 
   /** Pastors create their own groups (and lead them); admins create any. */
@@ -147,9 +163,22 @@ export class PolicyService {
     return this.isMembershipAdmin(u) || u.role === 'PASTOR';
   }
 
-  /** Edit, take attendance for, add members to and delete a group. */
-  canManageGroup(u: Principal, g: { pastorId: string | null; createdById: string | null }): boolean {
-    return this.isMembershipAdmin(u) || (u.role === 'PASTOR' && (g.pastorId === u.id || g.createdById === u.id));
+  canAddMembers(u: Principal): boolean {
+    return this.isMembershipAdmin(u) || this.isLeader(u);
+  }
+
+  private leadsGroup(u: Principal, g: GroupRef): boolean {
+    return u.role === 'PASTOR' && (g.pastorId === u.id || g.createdById === u.id);
+  }
+
+  /** Take attendance and manage members: the pastor, its shepherds, admins. */
+  canManageGroup(u: Principal, g: GroupRef): boolean {
+    return this.isMembershipAdmin(u) || this.leadsGroup(u, g) || (u.role === 'SHEPHERD' && !!g.shepherdIds?.includes(u.id));
+  }
+
+  /** Edit details, delete, assign shepherds: the pastor or admins (not shepherds). */
+  canAdministerGroup(u: Principal, g: GroupRef): boolean {
+    return this.isMembershipAdmin(u) || this.leadsGroup(u, g);
   }
 
   /** Choose any user as a group's pastor (pastors can only lead their own). */
@@ -157,15 +186,21 @@ export class PolicyService {
     return this.isMembershipAdmin(u);
   }
 
+  /** Church-wide services (Sunday, all-night, camps…). */
   canRecordSunday(u: Principal): boolean {
     return this.isMembershipAdmin(u) || u.role === 'PASTOR';
   }
 
-  /** Pastors edit members of groups they lead, or members they added. */
-  canEditMember(u: Principal, m: { createdById: string | null; groups: Array<{ pastorId: string | null; createdById: string | null }> }): boolean {
+  /** Leaders edit members of groups they manage, or members they added. */
+  canEditMember(u: Principal, m: { createdById: string | null; groups: GroupRef[] }): boolean {
     if (this.isMembershipAdmin(u)) return true;
-    if (u.role !== 'PASTOR') return false;
+    if (!this.isLeader(u)) return false;
     return m.createdById === u.id || m.groups.some((g) => this.canManageGroup(u, g));
+  }
+
+  /** See the list of pastors and shepherds. */
+  canViewLeaders(u: Principal): boolean {
+    return this.isMembershipAdmin(u);
   }
 
   canDeleteUser(u: Principal): boolean {

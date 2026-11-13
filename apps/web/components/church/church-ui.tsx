@@ -29,10 +29,12 @@ import { cn } from '@/lib/utils';
 /** Attendance · Members · Groups */
 export function ChurchTabs() {
   const pathname = usePathname();
+  const me = useMe();
   const tabs = [
     { href: '/church/attendance', label: 'Attendance' },
     { href: '/church/members', label: 'Members' },
     { href: '/church/groups', label: 'Groups' },
+    ...(me.data?.permissions.canManageMembership ? [{ href: '/church/leaders', label: 'Pastors & shepherds' }] : []),
   ];
   return (
     <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-border" aria-label="Church">
@@ -226,7 +228,7 @@ export function MemberFormDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   member?: MemberDto | null;
-  defaults?: { constituencyId?: string; basontaIds?: string[] };
+  defaults?: { constituencyId?: string; basontaIds?: string[]; fullName?: string; phone?: string; fromGuestId?: string; title?: string };
   onSaved?: (m: MemberDetail) => void;
 }) {
   const qc = useQueryClient();
@@ -251,7 +253,14 @@ export function MemberFormDialog({
             notes: member.notes ?? '',
             isActive: member.isActive,
           }
-        : { ...emptyMember, constituencyId: defaults?.constituencyId ?? '', basontaIds: defaults?.basontaIds ?? [] },
+        : {
+            ...emptyMember,
+            fullName: defaults?.fullName ?? '',
+            phone: defaults?.phone ?? '',
+            churchRole: defaults?.fromGuestId ? 'New convert' : 'Member',
+            constituencyId: defaults?.constituencyId ?? '',
+            basontaIds: defaults?.basontaIds ?? [],
+          },
     );
   }, [open, member, defaults]);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF((s) => ({ ...s, [k]: e.target.value }));
@@ -269,7 +278,9 @@ export function MemberFormDialog({
         joinedOn: f.joinedOn || null,
         notes: f.notes || null,
       };
-      return member ? api<MemberDetail>(`/members/${member.id}`, { method: 'PATCH', body }) : api<MemberDetail>('/members', { method: 'POST', body });
+      return member
+        ? api<MemberDetail>(`/members/${member.id}`, { method: 'PATCH', body })
+        : api<MemberDetail>('/members', { method: 'POST', body: { ...body, fromGuestId: defaults?.fromGuestId } });
     },
     onSuccess: (m) => {
       toast.success(member ? `${m.fullName} saved` : `${m.fullName} added`);
@@ -288,7 +299,7 @@ export function MemberFormDialog({
       open={open}
       onOpenChange={onOpenChange}
       wide
-      title={member ? `Edit ${member.fullName}` : 'Add member'}
+      title={member ? `Edit ${member.fullName}` : (defaults?.title ?? 'Add member')}
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -310,7 +321,7 @@ export function MemberFormDialog({
         <Field label="Full name" htmlFor="m-name">
           <Input id="m-name" required minLength={2} maxLength={120} autoComplete="off" value={f.fullName} onChange={set('fullName')} autoFocus />
         </Field>
-        <Field label="Role in church" htmlFor="m-role">
+        <Field label="Role in church" htmlFor="m-role" hint="Change this when they become a shepherd, pastor, leader…">
           <Input id="m-role" list="church-roles" maxLength={60} value={f.churchRole} onChange={set('churchRole')} />
           <datalist id="church-roles">
             {CHURCH_ROLE_SUGGESTIONS.map((r) => (

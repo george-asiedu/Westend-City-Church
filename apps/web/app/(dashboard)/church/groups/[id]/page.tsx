@@ -3,39 +3,152 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ClipboardCheck, Download, MapPin, Pencil, Phone, Plus, Trash2 } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, ArrowRightLeft, ClipboardCheck, Download, MapPin, Pencil, Phone, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { GROUP_TYPE_LABELS, type GroupDto } from '@wcc/shared';
+import { GROUP_TYPE_LABELS, type GroupDto, type MemberDto } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form';
+import { Dialog } from '@/components/ui/dialog';
+import { Field, Input, Select } from '@/components/ui/form';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, GroupFormDialog, MemberFormDialog, PastorCard } from '@/components/church/church-ui';
+import { GroupStatsPanel } from '@/components/church/group-stats';
 import { api, errorMessage } from '@/lib/api';
-import { downloadCsv, formatDay, localDate, mk, type MemberPage, type SessionRow } from '@/lib/membership';
+import { useMe } from '@/lib/queries';
+import { downloadCsv, formatDay, mk, sessionName, useGroups, useShepherdCandidates, type MemberPage, type SessionRow } from '@/lib/membership';
+import { cn } from '@/lib/utils';
+
+const isLeaderRole = (r: string) => /shepherd|leader|pastor|overseer/i.test(r);
+
+/** Move a member from this group to another of the same kind (e.g. choir → media). */
+function MoveDialog({ member, group, onClose }: { member: MemberDto | null; group: GroupDto; onClose: () => void }) {
+  const qc = useQueryClient();
+  const groups = useGroups(group.type);
+  const [to, setTo] = useState('');
+  const options = (groups.data ?? []).filter((g) => g.id !== group.id && g.isActive);
+  const move = useMutation({
+    mutationFn: () => api(`/members/${member!.id}/move`, { method: 'POST', body: { fromGroupId: group.id, toGroupId: to } }),
+    onSuccess: () => {
+      toast.success(`${member!.fullName} moved to ${options.find((g) => g.id === to)?.name}`);
+      void qc.invalidateQueries({ queryKey: ['members'] });
+      void qc.invalidateQueries({ queryKey: ['groups'] });
+      void qc.invalidateQueries({ queryKey: ['group'] });
+      setTo('');
+      onClose();
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  return (
+    <Dialog
+      open={!!member}
+      onOpenChange={(o) => !o && (setTo(''), onClose())}
+      title={member ? `Move ${member.fullName}` : ''}
+      description={`From ${group.name} to another ${GROUP_TYPE_LABELS[group.type].toLowerCase()}. Their attendance history stays.`}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button loading={move.isPending} disabled={!to} onClick={() => move.mutate()}>
+            Move
+          </Button>
+        </>
+      }
+    >
+      <Field label={`New ${GROUP_TYPE_LABELS[group.type].toLowerCase()}`} htmlFor="mv-to">
+        <Select id="mv-to" value={to} onChange={(e) => setTo(e.target.value)}>
+          <option value="">Choose…</option>
+          {options.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {group.type === 'BASONTA' && <p className="mt-3 text-xs text-muted">To add them to another basonta without leaving this one, edit the member instead.</p>}
+    </Dialog>
+  );
+}
+
+function ShepherdsCard({ g }: { g: GroupDto }) {
+  const qc = useQueryClient();
+  const candidates = useShepherdCandidates(g.canAdminister);
+  const [pick, setPick] = useState('');
+  const update = (r: GroupDto) => qc.setQueryData(mk.group(g.id), r);
+  const add = useMutation({
+    mutationFn: () => api<GroupDto>(`/groups/${g.id}/shepherds`, { method: 'POST', body: { userId: pick } }),
+    onSuccess: (r) => (update(r), setPick(''), toast.success('Shepherd added')),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const remove = useMutation({
+    mutationFn: (userId: string) => api<GroupDto>(`/groups/${g.id}/shepherds/${userId}`, { method: 'DELETE' }),
+    onSuccess: (r) => (update(r), toast.success('Shepherd removed')),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const available = (candidates.data ?? []).filter((c) => !g.shepherds.some((s) => s.id === c.id) && c.id !== g.pastor?.id);
+  return (
+    <Card className="space-y-3 p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Shepherds ({g.shepherds.length})</h2>
+      {g.shepherds.length ? (
+        <ul className="space-y-3">
+          {g.shepherds.map((s) => (
+            <li key={s.id} className="flex items-start gap-2">
+              <PastorCard pastor={s} className="flex-1" />
+              {g.canAdminister && (
+                <button className="rounded p-1 text-muted hover:bg-surface-2 hover:text-danger" aria-label={`Remove ${s.fullName}`} onClick={() => remove.mutate(s.id)}>
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted">No shepherds yet.</p>
+      )}
+      {g.canAdminister && (
+        <div className="flex gap-2 border-t border-border pt-3">
+          <Select className="min-w-0 flex-1" value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Add a shepherd">
+            <option value="">{available.length ? 'Add a shepherd…' : 'No users with the Shepherd role yet'}</option>
+            {available.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.fullName}
+              </option>
+            ))}
+          </Select>
+          <Button size="sm" disabled={!pick} loading={add.isPending} onClick={() => add.mutate()}>
+            Add
+          </Button>
+        </div>
+      )}
+      {g.canAdminister && <p className="text-xs text-muted">Shepherds can take attendance and manage members of this group. Give someone the Shepherd role in Admin → Users.</p>}
+    </Card>
+  );
+}
 
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const qc = useQueryClient();
+  const me = useMe();
+  const [tab, setTab] = useState<'members' | 'stats'>('members');
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [moving, setMoving] = useState<MemberDto | null>(null);
   const [q, setQ] = useState('');
+  const [leadersOnly, setLeadersOnly] = useState(false);
   const group = useQuery({ queryKey: mk.group(id), queryFn: () => api<GroupDto & { createdAt: string }>(`/groups/${id}`) });
   const g = group.data;
   const filter = g ? (g.type === 'CONSTITUENCY' ? { constituencyId: id } : { basontaId: id }) : {};
-  const members = useQuery({
-    queryKey: mk.members({ ...filter, limit: 500 }),
-    queryFn: () => api<MemberPage>('/members', { query: { ...filter, limit: 500 } }),
-    enabled: !!g,
-  });
+  const members = useQuery({ queryKey: mk.members({ ...filter, limit: 500 }), queryFn: () => api<MemberPage>('/members', { query: { ...filter, limit: 500 } }), enabled: !!g });
   const sessions = useQuery({ queryKey: mk.sessions({ groupId: id }), queryFn: () => api<SessionRow[]>('/attendance/sessions', { query: { groupId: id } }), enabled: !!g });
 
   if (group.isLoading) return <PageLoader />;
   if (!g) return <EmptyState title="Group not found">{group.error ? errorMessage(group.error) : null}</EmptyState>;
+  const canStats = g.canManage || !!me.data?.permissions.canViewChurchStats;
   const term = q.trim().toLowerCase();
-  const list = (members.data?.items ?? []).filter((m) => !term || [m.fullName, m.phone, m.location, m.churchRole].some((v) => v?.toLowerCase().includes(term)));
-  const takeHref = `/church/attendance/take?kind=GROUP_MEETING&groupId=${id}&date=${localDate()}`;
+  const all = members.data?.items ?? [];
+  const leaders = all.filter((m) => isLeaderRole(m.churchRole));
+  const list = all.filter((m) => (!leadersOnly || isLeaderRole(m.churchRole)) && (!term || [m.fullName, m.phone, m.location, m.churchRole].some((v) => v?.toLowerCase().includes(term))));
 
   return (
     <>
@@ -56,13 +169,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         actions={
           <>
             {g.canManage && (
-              <Link href={takeHref}>
+              <Link href={`/church/attendance/new?groupId=${id}`}>
                 <Button>
                   <ClipboardCheck className="h-4 w-4" /> Take attendance
                 </Button>
               </Link>
             )}
-            {g.canManage && (
+            {g.canAdminister && (
               <Button variant="outline" onClick={() => setEditing(true)}>
                 <Pencil className="h-4 w-4" /> Edit
               </Button>
@@ -76,117 +189,150 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       </PageHeader>
       <ChurchTabs />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 [&>*]:min-w-0">
-        <div className="space-y-4">
-          <Card className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Pastor</h2>
-            <PastorCard pastor={g.pastor} />
-          </Card>
-          {g.description && (
-            <Card className="p-4 text-sm">
-              <p className="whitespace-pre-line">{g.description}</p>
+      {canStats && (
+        <div className="mb-4 inline-flex rounded-lg border border-border bg-surface p-0.5 text-sm">
+          {(['members', 'stats'] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} aria-pressed={tab === t} className={cn('rounded-md px-3 py-1.5 font-medium', tab === t ? 'bg-brand text-white' : 'text-muted hover:text-fg')}>
+              {t === 'members' ? 'Members & meetings' : 'Statistics'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'stats' && canStats ? (
+        <GroupStatsPanel groupId={id} />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 [&>*]:min-w-0">
+          <div className="space-y-4">
+            <Card className="space-y-3 p-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Pastor</h2>
+              <PastorCard pastor={g.pastor} />
             </Card>
-          )}
-          <Card className="space-y-3 p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Meetings</h2>
-            {sessions.data?.length ? (
-              <ul className="divide-y divide-border text-sm">
-                {sessions.data.slice(0, 12).map((s) => (
-                  <li key={s.id}>
-                    <Link href={`/church/attendance/take?kind=GROUP_MEETING&groupId=${id}&date=${s.date}`} className="flex items-center justify-between py-2 hover:text-brand">
-                      <span>{formatDay(s.date)}</span>
-                      <span className="text-muted">
-                        {s.present}/{g.memberCount} present{s.visitors ? ` · ${s.visitors} visitors` : ''}
-                      </span>
+            <ShepherdsCard g={g} />
+            {g.description && (
+              <Card className="p-4 text-sm">
+                <p className="whitespace-pre-line">{g.description}</p>
+              </Card>
+            )}
+            <Card className="space-y-3 p-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Meetings</h2>
+              {sessions.data?.length ? (
+                <ul className="divide-y divide-border text-sm">
+                  {sessions.data.slice(0, 12).map((s) => (
+                    <li key={s.id}>
+                      <Link href={`/church/attendance/s/${s.id}`} className="flex min-w-0 items-center justify-between gap-2 py-2 hover:text-brand">
+                        <span className="min-w-0 truncate">
+                          {formatDay(s.date)}
+                          <span className="text-muted"> · {sessionName({ ...s, group: null })}</span>
+                        </span>
+                        <span className="shrink-0 text-muted">
+                          {s.present}/{g.memberCount}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">No meetings recorded yet.</p>
+              )}
+            </Card>
+            {g.canAdminister && (
+              <ConfirmButton
+                variant="ghost"
+                danger
+                className="text-danger"
+                title={`Delete ${g.name}?`}
+                description={`Members are kept${g.type === 'CONSTITUENCY' ? ' but will have no constituency' : ''}. This group’s meeting attendance history is deleted. This cannot be undone. To keep the history, edit the group and mark it inactive instead.`}
+                confirmLabel="Delete group"
+                onConfirm={async () => {
+                  try {
+                    await api(`/groups/${id}`, { method: 'DELETE' });
+                    toast.success(`${g.name} deleted`);
+                    void qc.invalidateQueries({ queryKey: ['groups'] });
+                    router.replace('/church/groups');
+                  } catch (e) {
+                    toast.error(errorMessage(e));
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> Delete group
+              </ConfirmButton>
+            )}
+          </div>
+
+          <Card className="space-y-3 p-4 lg:col-span-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="mr-auto font-semibold">Members ({members.data?.total ?? g.memberCount})</h2>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!all.length}
+                onClick={() =>
+                  downloadCsv(`${g.name} members.csv`, [
+                    ['Name', 'Role', 'Phone', 'Where they stay', 'Constituency', 'Basontas', 'Last seen'],
+                    ...all.map((m) => [m.fullName, m.churchRole, m.phone, m.location, m.constituency?.name, m.basontas.map((b) => b.name).join('; '), m.lastSeen]),
+                  ])
+                }
+              >
+                <Download className="h-4 w-4" /> CSV
+              </Button>
+              {g.canManage && (
+                <Button size="sm" onClick={() => setAdding(true)}>
+                  <Plus className="h-4 w-4" /> Add member
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Input className="min-w-0 flex-1" placeholder="Search name, phone, area, role…" value={q} onChange={(e) => setQ(e.target.value)} />
+              <div className="inline-flex shrink-0 rounded-lg border border-border p-0.5 text-sm">
+                <button onClick={() => setLeadersOnly(false)} aria-pressed={!leadersOnly} className={cn('rounded-md px-3 py-1.5', !leadersOnly ? 'bg-surface-2 font-medium' : 'text-muted')}>
+                  All
+                </button>
+                <button onClick={() => setLeadersOnly(true)} aria-pressed={leadersOnly} className={cn('rounded-md px-3 py-1.5', leadersOnly ? 'bg-surface-2 font-medium' : 'text-muted')}>
+                  Shepherds & leaders ({leaders.length})
+                </button>
+              </div>
+            </div>
+            {members.isLoading ? (
+              <PageLoader />
+            ) : list.length ? (
+              <ul className="divide-y divide-border">
+                {list.map((m) => (
+                  <li key={m.id} className="flex min-w-0 items-center gap-2 py-2.5">
+                    <Link href={`/church/members/${m.id}`} className="min-w-0 flex-1">
+                      <p className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium hover:text-brand">{m.fullName}</span>
+                        {isLeaderRole(m.churchRole) && <Badge tone="brand">{m.churchRole}</Badge>}
+                      </p>
+                      <p className="truncate text-xs text-muted">
+                        {isLeaderRole(m.churchRole) ? '' : m.churchRole}
+                        {m.location ? `${isLeaderRole(m.churchRole) ? '' : ' · '}${m.location}` : ''}
+                        {g.type === 'BASONTA' && m.constituency ? ` · ${m.constituency.name}` : ''}
+                      </p>
                     </Link>
+                    {m.phone && (
+                      <a href={`tel:${m.phone}`} className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-sm text-brand hover:bg-surface-2" aria-label={`Call ${m.fullName}`}>
+                        <Phone className="h-4 w-4" /> <span className="hidden sm:inline">{m.phone}</span>
+                      </a>
+                    )}
+                    {g.canManage && (
+                      <button className="shrink-0 rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg" aria-label={`Move ${m.fullName}`} title="Move to another group" onClick={() => setMoving(m)}>
+                        <ArrowRightLeft className="h-4 w-4" />
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">No meetings recorded yet.</p>
+              <p className="py-6 text-center text-sm text-muted">{term || leadersOnly ? 'No members match.' : 'No members yet.'}</p>
             )}
           </Card>
-          {g.canManage && (
-            <ConfirmButton
-              variant="ghost"
-              danger
-              className="text-danger"
-              title={`Delete ${g.name}?`}
-              description={`Members are kept${g.type === 'CONSTITUENCY' ? ' but will have no constituency' : ''}. This group’s meeting attendance history is deleted. This cannot be undone. To keep the history, edit the group and mark it inactive instead.`}
-              confirmLabel="Delete group"
-              onConfirm={async () => {
-                try {
-                  await api(`/groups/${id}`, { method: 'DELETE' });
-                  toast.success(`${g.name} deleted`);
-                  void qc.invalidateQueries({ queryKey: ['groups'] });
-                  router.replace('/church/groups');
-                } catch (e) {
-                  toast.error(errorMessage(e));
-                }
-              }}
-            >
-              <Trash2 className="h-4 w-4" /> Delete group
-            </ConfirmButton>
-          )}
         </div>
-
-        <Card className="space-y-3 p-4 lg:col-span-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="mr-auto font-semibold">Members ({members.data?.total ?? g.memberCount})</h2>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!members.data?.items.length}
-              onClick={() =>
-                downloadCsv(`${g.name} members.csv`, [
-                  ['Name', 'Role', 'Phone', 'Where they stay', 'Constituency', 'Basontas', 'Last seen'],
-                  ...(members.data?.items ?? []).map((m) => [m.fullName, m.churchRole, m.phone, m.location, m.constituency?.name, m.basontas.map((b) => b.name).join('; '), m.lastSeen]),
-                ])
-              }
-            >
-              <Download className="h-4 w-4" /> CSV
-            </Button>
-            {g.canManage && (
-              <Button size="sm" onClick={() => setAdding(true)}>
-                <Plus className="h-4 w-4" /> Add member
-              </Button>
-            )}
-          </div>
-          <Input placeholder="Search name, phone, area, role…" value={q} onChange={(e) => setQ(e.target.value)} />
-          {members.isLoading ? (
-            <PageLoader />
-          ) : list.length ? (
-            <ul className="divide-y divide-border">
-              {list.map((m) => (
-                <li key={m.id} className="flex min-w-0 items-center gap-3 py-2.5">
-                  <Link href={`/church/members/${m.id}`} className="min-w-0 flex-1">
-                    <p className="truncate font-medium hover:text-brand">{m.fullName}</p>
-                    <p className="truncate text-xs text-muted">
-                      {m.churchRole}
-                      {m.location ? ` · ${m.location}` : ''}
-                      {g.type === 'BASONTA' && m.constituency ? ` · ${m.constituency.name}` : ''}
-                    </p>
-                  </Link>
-                  {m.phone && (
-                    <a href={`tel:${m.phone}`} className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-sm text-brand hover:bg-surface-2" aria-label={`Call ${m.fullName}`}>
-                      <Phone className="h-4 w-4" /> <span className="hidden sm:inline">{m.phone}</span>
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="py-6 text-center text-sm text-muted">{term ? 'No members match.' : 'No members yet.'}</p>
-          )}
-        </Card>
-      </div>
+      )}
 
       <GroupFormDialog open={editing} onOpenChange={setEditing} group={g} />
-      <MemberFormDialog
-        open={adding}
-        onOpenChange={setAdding}
-        defaults={g.type === 'CONSTITUENCY' ? { constituencyId: g.id } : { basontaIds: [g.id] }}
-      />
+      <MemberFormDialog open={adding} onOpenChange={setAdding} defaults={g.type === 'CONSTITUENCY' ? { constituencyId: g.id } : { basontaIds: [g.id] }} />
+      <MoveDialog member={moving} group={g} onClose={() => setMoving(null)} />
     </>
   );
 }

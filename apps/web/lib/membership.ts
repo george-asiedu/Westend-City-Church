@@ -1,13 +1,18 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import type { AttendanceSummaryDto, GroupDto, MemberDto, PastorDto } from '@wcc/shared';
+import type { AttendanceSummaryDto, GroupDto, GroupStatsDto, GuestDto, LeaderDto, MemberDto, PastorDto, SessionRowDto } from '@wcc/shared';
 import { api } from './api';
 
 export const mk = {
   groups: (type?: string) => ['groups', type ?? 'all'] as const,
   group: (id: string) => ['group', id] as const,
   pastors: ['groups', 'pastors'] as const,
+  shepherdCandidates: ['groups', 'shepherd-candidates'] as const,
+  leaders: ['groups', 'leaders'] as const,
+  groupStats: (id: string, params: Record<string, unknown>) => ['group', id, 'stats', params] as const,
+  session: (id: string) => ['attendance', 'session', id] as const,
+  pendingGuests: ['attendance', 'guests', 'pending'] as const,
   members: (params: Record<string, unknown>) => ['members', params] as const,
   member: (id: string) => ['member', id] as const,
   sheet: (params: Record<string, unknown>) => ['attendance', 'sheet', params] as const,
@@ -27,18 +32,31 @@ export interface MemberPage {
   pageSize: number;
 }
 export interface MemberDetail extends MemberDto {
-  history: Array<{ sessionId: string; kind: 'SUNDAY_SERVICE' | 'GROUP_MEETING'; date: string; group: { id: string; name: string } | null }>;
+  broughtBy: { id: string; fullName: string } | null;
+  history: Array<{
+    sessionId: string;
+    kind: 'CHURCH_SERVICE' | 'GROUP_MEETING';
+    serviceType: string;
+    title: string | null;
+    date: string;
+    group: { id: string; name: string } | null;
+    broughtCount: number | null;
+  }>;
+  brought: GuestDto[];
 }
-export interface SessionRow {
-  id: string;
-  kind: 'SUNDAY_SERVICE' | 'GROUP_MEETING';
-  date: string;
-  group: { id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' } | null;
-  present: number;
-  visitors: number;
-  firstTimers: number;
-}
+export type SessionRow = SessionRowDto;
 export type Summary = AttendanceSummaryDto;
+export type GroupStats = GroupStatsDto;
+export type Leader = LeaderDto;
+
+export const useShepherdCandidates = (enabled = true) =>
+  useQuery({ queryKey: mk.shepherdCandidates, queryFn: () => api<PastorDto[]>('/groups/shepherd-candidates'), enabled, staleTime: 60_000 });
+
+/** "Sunday service", "Sunday service · 2nd service", or the group name for meetings. */
+export function sessionName(s: { serviceType: string; title: string | null; group?: { name: string } | null }): string {
+  const base = s.group ? `${s.group.name} · ${s.serviceType}` : s.serviceType;
+  return s.title ? `${base} · ${s.title}` : base;
+}
 
 /** YYYY-MM-DD in the viewer's own time zone (not UTC). */
 export function localDate(d = new Date()): string {
@@ -80,4 +98,9 @@ export function downloadCsv(filename: string, rows: Array<Array<string | number 
   a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Super Admins (or MANAGE_MEMBERSHIP), pastors and shepherds can add members. */
+export function canAddMembers(me: { role: string; permissions: { canManageMembership: boolean } }): boolean {
+  return me.permissions.canManageMembership || me.role === 'PASTOR' || me.role === 'SHEPHERD';
 }

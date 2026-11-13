@@ -111,3 +111,32 @@ describe('membership', () => {
     expect(p.canEditMember(user('VIEWER', ), { createdById: 'me', groups: [] })).toBe(false);
   });
 });
+
+describe('shepherds', () => {
+  const sh = user('SHEPHERD');
+  const theirs = { pastorId: 'x', createdById: 'x', shepherdIds: ['me'] };
+  const other = { pastorId: 'x', createdById: 'x', shepherdIds: ['y'] };
+  it('view members and add members, but not create groups', () => {
+    expect(p.canViewMembership(sh) && p.canAddMembers(sh)).toBe(true);
+    expect(p.canCreateGroup(sh)).toBe(false);
+  });
+  it('manage only groups they shepherd, never administer them', () => {
+    expect(p.canManageGroup(sh, theirs)).toBe(true);
+    expect(p.canManageGroup(sh, other)).toBe(false);
+    expect(p.canAdministerGroup(sh, theirs)).toBe(false);
+  });
+  it('edit members of their groups', () => {
+    expect(p.canEditMember(sh, { createdById: 'x', groups: [theirs] })).toBe(true);
+    expect(p.canEditMember(sh, { createdById: 'x', groups: [other] })).toBe(false);
+  });
+  it('do not record church-wide services or see church-wide stats', () => {
+    expect(p.canRecordSunday(sh) || p.canViewChurchStats(sh) || p.canViewChurchStats(user('PASTOR'))).toBe(false);
+  });
+  it('can upload media where granted, like pastors', () => {
+    expect(p.canUpload(user('SHEPHERD', { canUpload: true }), 'cat-granted')).toBe(true);
+    expect(p.canUpload(sh, 'cat-granted')).toBe(false);
+  });
+  it('only Super Admin sees the leaders list', () => {
+    expect(ROLES.map((r) => p.canViewLeaders(user(r)))).toEqual([true, false, false, false, false]);
+  });
+});

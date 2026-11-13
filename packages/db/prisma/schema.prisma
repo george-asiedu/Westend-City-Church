@@ -18,6 +18,7 @@ enum Role {
   MEDIA_ADMIN
   MEDIA_TEAM
   PASTOR
+  SHEPHERD
   VIEWER
 }
 
@@ -92,6 +93,7 @@ model User {
   groupsCreated   ChurchGroup[]        @relation("GroupCreatedBy")
   membersCreated  Member[]             @relation("MemberCreatedBy")
   attendanceTaken AttendanceSession[]  @relation("AttendanceRecordedBy")
+  shepherding     GroupShepherd[]
   recoveryCodes   RecoveryCode[]
   shareLinks      ShareLink[]
   exports         ExportJob[]
@@ -422,8 +424,13 @@ enum GroupType {
 }
 
 enum AttendanceKind {
-  SUNDAY_SERVICE
+  CHURCH_SERVICE
   GROUP_MEETING
+}
+
+enum GuestIntent {
+  VISIT
+  JOINING
 }
 
 /// A constituency (where members belong) or a basonta (ministry). Led by a pastor (an app user).
@@ -442,9 +449,10 @@ model ChurchGroup {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  members  Member[]            @relation("MemberConstituency")
-  basonta  MemberBasonta[]
-  sessions AttendanceSession[]
+  members   Member[]            @relation("MemberConstituency")
+  basonta   MemberBasonta[]
+  sessions  AttendanceSession[]
+  shepherds GroupShepherd[]
 
   @@unique([type, name])
   @@index([pastorId])
@@ -470,8 +478,10 @@ model Member {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  basontas   MemberBasonta[]
-  attendance AttendanceRecord[]
+  basontas      MemberBasonta[]
+  attendance    AttendanceRecord[]
+  guestsBrought Guest[]            @relation("GuestBroughtBy")
+  convertedFrom Guest?             @relation("GuestConverted")
 
   @@index([constituencyId])
   @@index([fullName])
@@ -487,10 +497,12 @@ model MemberBasonta {
   @@index([groupId])
 }
 
-/// One Sunday service (groupId null) or one group meeting, on a date.
+/// A church-wide service (groupId null) or a group meeting, on a date. serviceType is
+/// free text with suggestions (Sunday service, all-night, camp, conference…).
 model AttendanceSession {
   id              String         @id @default(uuid()) @db.Uuid
   kind            AttendanceKind
+  serviceType     String         @db.VarChar(40)
   groupId         String?        @db.Uuid
   group           ChurchGroup?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
   date            DateTime       @db.Date
@@ -504,6 +516,7 @@ model AttendanceSession {
   updatedAt       DateTime       @updatedAt
 
   records AttendanceRecord[]
+  guests  Guest[]
 
   @@index([date])
   @@index([groupId, date])
@@ -511,11 +524,44 @@ model AttendanceSession {
 
 /// A member present at a session (absence = no row).
 model AttendanceRecord {
-  sessionId String            @db.Uuid
-  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  memberId  String            @db.Uuid
-  member    Member            @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  sessionId    String            @db.Uuid
+  session      AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  memberId     String            @db.Uuid
+  member       Member            @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  /// People this member brought: null = not recorded, 0 = brought nobody.
+  broughtCount Int?
 
   @@id([sessionId, memberId])
   @@index([memberId])
+}
+
+/// A shepherd (app user) helping lead a group.
+model GroupShepherd {
+  groupId   String      @db.Uuid
+  group     ChurchGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String      @db.Uuid
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@id([groupId, userId])
+  @@index([userId])
+}
+
+/// Someone a member brought to a service or meeting.
+model Guest {
+  id                String            @id @default(uuid()) @db.Uuid
+  sessionId         String            @db.Uuid
+  session           AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  broughtById       String?           @db.Uuid
+  broughtBy         Member?           @relation("GuestBroughtBy", fields: [broughtById], references: [id], onDelete: SetNull)
+  fullName          String?           @db.VarChar(120)
+  phone             String?           @db.VarChar(30)
+  intent            GuestIntent       @default(VISIT)
+  convertedMemberId String?           @unique @db.Uuid
+  convertedMember   Member?           @relation("GuestConverted", fields: [convertedMemberId], references: [id], onDelete: SetNull)
+  createdAt         DateTime          @default(now())
+
+  @@index([sessionId])
+  @@index([broughtById])
+  @@index([intent, convertedMemberId])
 }

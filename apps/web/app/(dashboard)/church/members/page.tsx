@@ -11,7 +11,7 @@ import { Badge, Card, EmptyState, PageHeader, PageLoader } from '@/components/ui
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
 import { api, errorMessage } from '@/lib/api';
 import { useMe } from '@/lib/queries';
-import { downloadCsv, formatDay, mk, useGroups, type MemberPage } from '@/lib/membership';
+import { canAddMembers, downloadCsv, formatDay, mk, useGroups, type MemberPage } from '@/lib/membership';
 
 export default function MembersPage() {
   const me = useMe();
@@ -76,7 +76,7 @@ export default function MembersPage() {
             <Button variant="outline" loading={exporting} onClick={exportAll}>
               <Download className="h-4 w-4" /> CSV
             </Button>
-            {p.canCreateGroup && (
+            {canAddMembers(me.data!) && (
               <Button onClick={() => setAdding(true)}>
                 <Plus className="h-4 w-4" /> Add member
               </Button>
@@ -187,7 +187,7 @@ export default function MembersPage() {
         </Card>
       ) : (
         <EmptyState icon={<Users className="h-8 w-8" />} title={debounced || constituencyId || basontaId ? 'No members match' : 'No members yet'}>
-          {p.canCreateGroup && !debounced ? 'Add members here, or from a constituency or basonta page.' : null}
+          {canAddMembers(me.data!) && !debounced ? 'Add members here, or from a constituency or basonta page.' : null}
         </EmptyState>
       )}
       <MemberFormDialog open={adding} onOpenChange={setAdding} />

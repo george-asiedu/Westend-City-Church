@@ -23,7 +23,7 @@ function GroupCard({ g }: { g: GroupDto }) {
           </h3>
           <div className="flex shrink-0 gap-1">
             {!g.isActive && <Badge tone="warning">Inactive</Badge>}
-            {g.canManage && <Badge tone="brand">Yours</Badge>}
+            {g.canAdminister ? <Badge tone="brand">Yours</Badge> : g.canManage ? <Badge tone="brand">Shepherding</Badge> : null}
           </div>
         </div>
         <PastorCard pastor={g.pastor} className="relative z-10 w-fit max-w-full" />
@@ -90,7 +90,7 @@ export default function GroupsPage() {
         <div className="mt-8">
           <RolePermissionsCard
             title="Who can see and manage church records"
-            note="Super Admins can do everything. Pastors can always view, create their own groups, and manage the groups they lead and their members."
+            note="Super Admins can do everything. Pastors and shepherds can always view members; pastors create and lead their own groups; shepherds help run the groups they’re assigned to."
             permissions={['VIEW_MEMBERSHIP', 'MANAGE_MEMBERSHIP']}
           />
         </div>

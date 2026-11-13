@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
 import { api, errorMessage } from '@/lib/api';
-import { formatDay, mk, type MemberDetail } from '@/lib/membership';
+import { formatDay, mk, sessionName, type MemberDetail } from '@/lib/membership';
+import { GUEST_INTENT_LABELS } from '@wcc/shared';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -106,6 +107,7 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
             <Row label="Gender">{d.gender}</Row>
             <Row label="Date of birth">{d.dateOfBirth && `${formatDay(d.dateOfBirth)}${age !== null ? ` (${age})` : ''}`}</Row>
             <Row label="Joined">{d.joinedOn && formatDay(d.joinedOn)}</Row>
+            <Row label="Brought by">{d.broughtBy && <Link className="text-brand hover:underline" href={`/church/members/${d.broughtBy.id}`}>{d.broughtBy.fullName}</Link>}</Row>
             <Row label="Notes">{d.notes && <span className="whitespace-pre-line">{d.notes}</span>}</Row>
           </dl>
         </Card>
@@ -114,9 +116,14 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
           {d.history.length ? (
             <ul className="divide-y divide-border text-sm">
               {d.history.map((h) => (
-                <li key={h.sessionId} className="flex items-center justify-between gap-2 py-2">
-                  <span>{formatDay(h.date)}</span>
-                  <span className="truncate text-muted">{h.kind === 'SUNDAY_SERVICE' ? 'Sunday service' : h.group?.name}</span>
+                <li key={h.sessionId}>
+                  <Link href={`/church/attendance/s/${h.sessionId}`} className="flex min-w-0 items-center justify-between gap-2 py-2 hover:text-brand">
+                    <span className="shrink-0">{formatDay(h.date)}</span>
+                    <span className="min-w-0 truncate text-right text-muted">
+                      {sessionName(h)}
+                      {h.broughtCount ? ` · brought ${h.broughtCount}` : ''}
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -124,6 +131,30 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
             <p className="text-sm text-muted">Not marked present anywhere yet.</p>
           )}
           {d.history.length >= 30 && <p className="mt-2 text-xs text-muted">Showing the latest 30.</p>}
+        </Card>
+        <Card className="p-4 lg:col-span-2">
+          <h2 className="mb-2 font-semibold">People {d.fullName.split(' ')[0]} brought ({d.brought.length})</h2>
+          {d.brought.length ? (
+            <ul className="divide-y divide-border text-sm">
+              {d.brought.map((g) => (
+                <li key={g.id} className="flex min-w-0 flex-wrap items-center gap-2 py-2">
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium">{g.fullName || 'Name not recorded'}</span>
+                    {g.session && <span className="text-muted"> · {sessionName(g.session)} · {formatDay(g.session.date)}</span>}
+                  </span>
+                  {g.convertedMember ? (
+                    <Link href={`/church/members/${g.convertedMember.id}`}>
+                      <Badge tone="success">Now a member</Badge>
+                    </Link>
+                  ) : (
+                    <Badge tone={g.intent === 'JOINING' ? 'brand' : 'neutral'}>{GUEST_INTENT_LABELS[g.intent]}</Badge>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">Nobody recorded yet.</p>
+          )}
         </Card>
       </div>
       {d.canEdit && (

@@ -52,7 +52,7 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const contributor = role === 'MEDIA_TEAM' || role === 'PASTOR';
+  const contributor = role === 'MEDIA_TEAM' || role === 'PASTOR' || role === 'SHEPHERD';
   return (
     <Dialog
       open={open}

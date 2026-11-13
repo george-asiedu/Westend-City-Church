@@ -17,8 +17,9 @@ import {
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
-import { AttendanceKind, GroupType } from '@wcc/db';
+import { AttendanceKind, GroupType, GuestIntent } from '@wcc/db';
 import { CurrentUser, Meta, ReqMeta } from '../common/decorators';
 import type { AuthUser } from '../common/auth-user';
 import { MembershipService } from './membership.service';
@@ -59,31 +60,49 @@ class MemberDto {
   @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @Matches(DATE) joinedOn?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(1000) notes?: string | null;
+  @IsOptional() @IsUUID() fromGuestId?: string;
+}
+class MoveDto {
+  @IsUUID() fromGroupId!: string;
+  @IsUUID() toGroupId!: string;
+}
+class ShepherdDto {
+  @IsUUID() userId!: string;
 }
 class MemberQuery {
   @IsOptional() @IsString() @MaxLength(100) q?: string;
   @IsOptional() @ValidateIf((_, v) => v !== 'none') @IsUUID() constituencyId?: string;
   @IsOptional() @IsUUID() basontaId?: string;
+  @IsOptional() @IsString() @MaxLength(60) churchRole?: string;
   @IsOptional() @IsIn(['active', 'inactive', 'all']) status?: 'active' | 'inactive' | 'all';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(500) limit?: number;
 }
 
-class SheetQuery {
-  @IsEnum(AttendanceKind) kind!: AttendanceKind;
-  @IsOptional() @IsUUID() groupId?: string;
+class SessionDto {
+  @IsOptional() @ValidateIf(nullable) @IsUUID() groupId?: string | null;
+  @IsString() @MinLength(2) @MaxLength(40) serviceType!: string;
+  @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(120) title?: string | null;
   @Matches(DATE) date!: string;
 }
 class SheetDto {
-  @IsEnum(AttendanceKind) kind!: AttendanceKind;
-  @IsOptional() @ValidateIf(nullable) @IsUUID() groupId?: string | null;
-  @Matches(DATE) date!: string;
   @IsArray() @ArrayMaxSize(5000) @IsUUID('4', { each: true }) presentIds!: string[];
   @IsArray() @ArrayMaxSize(5000) @IsUUID('4', { each: true }) rosterIds!: string[];
   @IsOptional() @IsInt() @Min(0) @Max(100000) visitorCount?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100000) firstTimerCount?: number;
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(1000) notes?: string | null;
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(40) serviceType?: string;
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(120) title?: string | null;
+  @IsOptional() @Matches(DATE) date?: string;
+}
+class GuestInputDto {
+  @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(120) fullName?: string | null;
+  @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(30) @Matches(/^[+\d\s()-]*$/) phone?: string | null;
+  @IsEnum(GuestIntent) intent!: GuestIntent;
+}
+class BroughtDto {
+  @IsInt() @Min(0) @Max(200) broughtCount!: number;
+  @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => GuestInputDto) guests!: GuestInputDto[];
 }
 class SessionQuery {
   @IsOptional() @IsEnum(AttendanceKind) kind?: AttendanceKind;
@@ -111,9 +130,35 @@ export class GroupsController {
     return this.svc.pastors(user);
   }
 
+  @Get('shepherd-candidates')
+  shepherdCandidates(@CurrentUser() user: AuthUser) {
+    return this.svc.shepherdCandidates(user);
+  }
+
+  /** Every pastor and shepherd (Super Admin). */
+  @Get('leaders')
+  leaders(@CurrentUser() user: AuthUser) {
+    return this.svc.leaders(user);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.svc.getGroup(user, id);
+  }
+
+  @Get(':id/stats')
+  stats(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Query() q: RangeQuery) {
+    return this.svc.groupStats(user, id, q);
+  }
+
+  @Post(':id/shepherds')
+  addShepherd(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ShepherdDto, @Meta() meta: ReqMeta) {
+    return this.svc.addShepherd(user, id, dto.userId, meta);
+  }
+
+  @Delete(':id/shepherds/:userId')
+  removeShepherd(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('userId', ParseUUIDPipe) userId: string, @Meta() meta: ReqMeta) {
+    return this.svc.removeShepherd(user, id, userId, meta);
   }
 
   @Post()
@@ -157,6 +202,12 @@ export class MembersController {
     return this.svc.updateMember(user, id, dto, meta);
   }
 
+  @Post(':id/move')
+  @HttpCode(200)
+  move(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: MoveDto, @Meta() meta: ReqMeta) {
+    return this.svc.moveMember(user, id, dto.fromGroupId, dto.toGroupId, meta);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() meta: ReqMeta) {
@@ -168,26 +219,49 @@ export class MembersController {
 export class AttendanceController {
   constructor(private readonly svc: MembershipService) {}
 
-  /** The roster for one service/meeting on one date, with who was present. */
-  @Get('sheet')
-  sheet(@CurrentUser() user: AuthUser, @Query() q: SheetQuery) {
-    return this.svc.getSheet(user, q);
-  }
-
-  @Put('sheet')
-  save(@CurrentUser() user: AuthUser, @Body() dto: SheetDto, @Meta() meta: ReqMeta) {
-    return this.svc.saveSheet(user, dto, meta);
-  }
-
   @Get('sessions')
   sessions(@CurrentUser() user: AuthUser, @Query() q: SessionQuery) {
     return this.svc.listSessions(user, q);
+  }
+
+  /** Opens (or creates) the session for a service/meeting on a date. */
+  @Post('sessions')
+  @HttpCode(200)
+  createSession(@CurrentUser() user: AuthUser, @Body() dto: SessionDto, @Meta() meta: ReqMeta) {
+    return this.svc.createSession(user, dto, meta);
+  }
+
+  @Get('sessions/:id')
+  sheet(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.svc.getSheet(user, id);
+  }
+
+  @Put('sessions/:id')
+  save(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SheetDto, @Meta() meta: ReqMeta) {
+    return this.svc.saveSheet(user, id, dto, meta);
+  }
+
+  @Put('sessions/:id/brought/:memberId')
+  brought(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Body() dto: BroughtDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.svc.saveBrought(user, id, memberId, dto, meta);
   }
 
   @Delete('sessions/:id')
   @HttpCode(204)
   async removeSession(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() meta: ReqMeta) {
     await this.svc.deleteSession(user, id, meta);
+  }
+
+  /** People brought who want to join and aren't members yet. */
+  @Get('guests/pending')
+  pendingGuests(@CurrentUser() user: AuthUser) {
+    return this.svc.pendingGuests(user);
   }
 
   @Get('summary')

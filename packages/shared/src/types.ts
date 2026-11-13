@@ -34,6 +34,8 @@ export interface MeResponse {
     canManageMembership: boolean;
     canCreateGroup: boolean;
     canRecordSunday: boolean;
+    /** Church-wide charts and reports */
+    canViewChurchStats: boolean;
     canViewAudit: boolean;
     canPurge: boolean;
   };
@@ -122,9 +124,13 @@ export interface GroupDto {
   meetingPlace: string | null;
   isActive: boolean;
   pastor: PastorDto | null;
+  shepherds: PastorDto[];
   memberCount: number;
-  lastMeeting: { date: string; present: number } | null;
+  lastMeeting: { id: string; date: string; present: number } | null;
+  /** Take attendance and manage members (pastor, shepherds, admins). */
   canManage: boolean;
+  /** Edit details, delete, assign shepherds (pastor, admins). */
+  canAdminister: boolean;
 }
 
 export interface MemberDto {
@@ -145,37 +151,71 @@ export interface MemberDto {
   canEdit: boolean;
 }
 
-export interface AttendanceSheetDto {
-  session: {
-    id: string;
-    visitorCount: number;
-    firstTimerCount: number;
-    notes: string | null;
-    title: string | null;
-    recordedBy: string | null;
-    updatedAt: string;
-  } | null;
-  kind: 'SUNDAY_SERVICE' | 'GROUP_MEETING';
-  group: { id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' } | null;
+export interface GuestDto {
+  id: string;
+  fullName: string | null;
+  phone: string | null;
+  intent: 'VISIT' | 'JOINING';
+  broughtBy: { id: string; fullName: string } | null;
+  convertedMember: { id: string; fullName: string } | null;
+  session?: { id: string; date: string; serviceType: string; title: string | null; group: { id: string; name: string } | null };
+}
+
+export interface SessionInfoDto {
+  id: string;
+  kind: 'CHURCH_SERVICE' | 'GROUP_MEETING';
+  serviceType: string;
+  title: string | null;
   date: string;
+  group: { id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' } | null;
+  visitorCount: number;
+  firstTimerCount: number;
+  notes: string | null;
+  recordedBy: string | null;
+  updatedAt: string;
+}
+
+export interface AttendanceSheetDto {
+  session: SessionInfoDto;
   roster: Array<{ id: string; fullName: string; churchRole: string; constituency: string | null; constituencyId: string | null }>;
   presentIds: string[];
+  /** memberId → people brought (0 = nobody); missing = not recorded */
+  brought: Record<string, number>;
+  guests: GuestDto[];
   canEdit: boolean;
+}
+
+export interface SessionRowDto {
+  id: string;
+  kind: 'CHURCH_SERVICE' | 'GROUP_MEETING';
+  serviceType: string;
+  title: string | null;
+  date: string;
+  group: { id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' } | null;
+  present: number;
+  visitors: number;
+  firstTimers: number;
+  guests: number;
 }
 
 export interface AttendanceSummaryDto {
   from: string;
   to: string;
   activeMembers: number;
-  sundays: Array<{
+  services: Array<{
     id: string;
     date: string;
+    serviceType: string;
+    title: string | null;
     present: number;
     visitors: number;
     firstTimers: number;
+    guests: number;
     byConstituency: Record<string, number>;
   }>;
+  serviceTypes: Array<{ serviceType: string; sessions: number; averagePresent: number }>;
   constituencies: Array<{ id: string; name: string; members: number }>;
+  basontas: Array<{ id: string; name: string; members: number }>;
   groups: Array<{
     id: string;
     type: 'CONSTITUENCY' | 'BASONTA';
@@ -186,5 +226,33 @@ export interface AttendanceSummaryDto {
     averagePresent: number;
     lastMeeting: string | null;
   }>;
+  guests: { visit: number; joining: number; converted: number; broughtNone: number; broughtSome: number };
   absentees: Array<{ id: string; fullName: string; phone: string | null; constituency: string | null; lastSeen: string | null }>;
+}
+
+export interface GroupStatsDto {
+  from: string;
+  to: string;
+  members: number;
+  meetings: Array<{ id: string; date: string; serviceType: string; title: string | null; present: number; visitors: number; guests: number }>;
+  averagePresent: number;
+  lastMeeting: { id: string; date: string; present: number; absent: number } | null;
+  roles: Array<{ role: string; count: number }>;
+  guests: { visit: number; joining: number; converted: number };
+  /** Group members at church-wide services in the period */
+  churchServices: { sessions: number; averagePresent: number };
+}
+
+export interface LeaderDto {
+  id: string;
+  fullName: string;
+  title: string | null;
+  phone: string | null;
+  email: string;
+  role: 'SUPER_ADMIN' | 'PASTOR' | 'SHEPHERD';
+  status: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+  leads: Array<{ id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' }>;
+  shepherds: Array<{ id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' }>;
 }

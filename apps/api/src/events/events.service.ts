@@ -90,7 +90,7 @@ export class EventsService {
     if (this.policy.isAdmin(user)) return { deletedAt: null };
     const hidden = [...user.grants.entries()].filter(([, g]) => !g.canView).map(([id]) => id);
     const managed = [...user.grants.entries()].filter(([, g]) => g.canManage).map(([id]) => id);
-    const draftsOk = user.role === 'MEDIA_TEAM' || user.role === 'PASTOR';
+    const draftsOk = user.role === 'MEDIA_TEAM' || user.role === 'PASTOR' || user.role === 'SHEPHERD';
     return {
       deletedAt: null,
       categoryId: hidden.length ? { notIn: hidden } : undefined,

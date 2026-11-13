@@ -40,6 +40,7 @@ export class MeService {
         canManageMembership: this.policy.isMembershipAdmin(p),
         canCreateGroup: this.policy.canCreateGroup(p),
         canRecordSunday: this.policy.canRecordSunday(p),
+        canViewChurchStats: this.policy.canViewChurchStats(p),
         canViewAudit: this.policy.canViewAudit(p),
         canPurge: this.policy.canPurge(p),
       },

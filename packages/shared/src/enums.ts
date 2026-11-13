@@ -4,6 +4,7 @@ export const Role = {
   MEDIA_ADMIN: 'MEDIA_ADMIN',
   MEDIA_TEAM: 'MEDIA_TEAM',
   PASTOR: 'PASTOR',
+  SHEPHERD: 'SHEPHERD',
   VIEWER: 'VIEWER',
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
@@ -44,6 +45,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   MEDIA_ADMIN: 'Media Admin',
   MEDIA_TEAM: 'Media Team',
   PASTOR: 'Pastor',
+  SHEPHERD: 'Shepherd',
   VIEWER: 'Viewer',
 };
 
@@ -59,6 +61,22 @@ export const ROLE_PERMISSION_LABELS: Record<RolePermissionKey, string> = {
   VIEW_MEMBERSHIP: 'View members, groups and attendance',
   MANAGE_MEMBERSHIP: 'Manage all members, groups and attendance',
 };
+
+/** Suggestions for what a session is; any text is allowed (max 40 chars). */
+export const SERVICE_TYPE_SUGGESTIONS = [
+  'Sunday service',
+  'Midweek service',
+  'All-night service',
+  'Prayer meeting',
+  'Camp',
+  'Conference',
+  'Special service',
+  'Outreach',
+];
+export const MEETING_TYPE_SUGGESTIONS = ['Meeting', 'Rehearsal', 'Prayer meeting', 'Outreach', 'Retreat', 'Camp'];
+
+export const GUEST_INTENT_LABELS = { VISIT: 'Just visiting', JOINING: 'Wants to join' } as const;
+export type GuestIntent = keyof typeof GUEST_INTENT_LABELS;
 
 export const GROUP_TYPE_LABELS = { CONSTITUENCY: 'Constituency', BASONTA: 'Basonta' } as const;
 export type GroupType = keyof typeof GROUP_TYPE_LABELS;
