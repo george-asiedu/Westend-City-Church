@@ -9,8 +9,9 @@ User=postgres
 Group=postgres
 Environment=WCC_DB=wcc_media WCC_DB_PORT=__PG_PORT__ WCC_BACKUP_DIR=/var/backups/wcc
 ExecStart=/usr/local/sbin/wcc-backup-db
-# Then refresh the Neon restore copy (runs as root: it reads /etc/wcc; never fails the backup).
-ExecStartPost=+/usr/local/sbin/wcc-neon-copy
+# Then refresh the Neon restore copy. '+' runs it as root (it reads /etc/wcc);
+# '-' means a problem there never fails the backup (or a deploy waiting on it).
+ExecStartPost=-+/usr/local/sbin/wcc-neon-copy
 Nice=10
 IOSchedulingClass=idle
 ProtectSystem=strict

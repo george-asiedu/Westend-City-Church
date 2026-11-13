@@ -26,6 +26,8 @@ NEON_ENV="${ENV_DIR}/neon.env"
 DIR="${WCC_BACKUP_DIR:-/var/backups/wcc}"
 DB="${WCC_DB:-wcc_media}"
 log() { echo "neon-copy: $*"; }
+# Any unexpected error (e.g. Neon unreachable): say so, leave Neon as it is, don't fail the backup.
+trap 'rc=$?; [ $rc -ne 0 ] && log "stopped on an error (exit $rc); Neon left as it is"; exit 0' EXIT
 
 [ -r "${NEON_ENV}" ] || { log "no ${NEON_ENV}; skipping"; exit 0; }
 # The local database port (set by setup-db.sh), for manual runs outside the backup service.
@@ -71,7 +73,7 @@ fi
 
 log "loading $(basename "${DUMP}") into Neon (PostgreSQL ${NEON_MAJOR})"
 LIST="$(mktemp)"
-trap 'rm -f "${LIST}"' EXIT
+trap 'rc=$?; rm -f "${LIST}"; [ $rc -ne 0 ] && log "stopped on an error (exit $rc); Neon left as it is"; exit 0' EXIT
 # Leave Neon's own schema and extensions alone (they already exist there and Neon manages them).
 "${BIN}/pg_restore" -l "${DUMP}" | grep -vE ' (EXTENSION|SCHEMA) - | COMMENT - EXTENSION ' > "${LIST}"
 if ! "${BIN}/pg_restore" --clean --if-exists --no-owner --no-privileges --single-transaction --exit-on-error -L "${LIST}" -d "${NEON}" "${DUMP}"; then
