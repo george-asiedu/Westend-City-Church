@@ -1,0 +1,17 @@
+[Unit]
+Description=WCC Media database backup (pg_dump)
+After=postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+Environment=WCC_DB=wcc_media WCC_DB_PORT=__PG_PORT__ WCC_BACKUP_DIR=/var/backups/wcc
+ExecStart=/usr/local/sbin/wcc-backup-db
+Nice=10
+IOSchedulingClass=idle
+ProtectSystem=strict
+ReadWritePaths=/var/backups/wcc
+PrivateTmp=true
+NoNewPrivileges=true

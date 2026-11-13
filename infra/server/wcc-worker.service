@@ -2,8 +2,8 @@
 # ZIP exports, trash purge, email. Installed by setup.sh.
 [Unit]
 Description=WCC Media worker
-After=network-online.target redis-server.service
-Wants=network-online.target
+After=network-online.target redis-server.service postgresql.service
+Wants=network-online.target postgresql.service
 Requires=redis-server.service
 StartLimitIntervalSec=120
 StartLimitBurst=5

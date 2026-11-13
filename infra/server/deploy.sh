@@ -7,7 +7,7 @@
 #
 #  1. unpack into /srv/wcc-media/releases/<time>-<sha>
 #  2. install production deps (lockfile exact), generate the Prisma client
-#  3. run migrations (direct DB URL) and seed categories
+#  3. back up the database, run migrations (owner role) and seed categories
 #  4. switch `current` atomically, restart, wait for health
 #  5. roll back automatically if unhealthy
 # Keep migrations additive: a rollback changes code, not the schema.
@@ -45,9 +45,15 @@ set -a
 set +a
 export NODE_ENV=production
 
+# Local database: dump it before migrating (skipped on a database that isn't on this box).
+if systemctl cat wcc-backup.service >/dev/null 2>&1; then
+  log "Backing up the database"
+  sudo /usr/bin/systemctl start wcc-backup.service
+fi
+
 log "Migrating"
 DATABASE_URL="${DATABASE_MIGRATION_URL}" corepack pnpm --filter @wcc/db exec prisma migrate deploy
-DATABASE_URL="${DATABASE_MIGRATION_URL}" node packages/db/dist/prisma/seed.js  # direct endpoint, not the pooler
+DATABASE_URL="${DATABASE_MIGRATION_URL}" node packages/db/dist/prisma/seed.js  # as the owner role
 
 log "Switching"
 ln -sfn "${RELEASE}" "${APP_DIR}/current.next"

@@ -4,7 +4,7 @@
 |---|---|---|
 | Web app (Next.js PWA) | **Vercel** | Gives the HTTPS URL users open. Proxies `/api/*` to the VPS. |
 | API + worker | **Contabo VPS** (systemd, beside Nichelle and Zuri) | `infra/server/*`, deployed by GitHub Actions |
-| Database | **Neon** (managed) | Not deployed by us; migrations run on each API deploy |
+| Database | **PostgreSQL on the VPS** (the cluster Zuri already runs) | `setup-db.sh` once; migrations run on each API deploy, after a backup |
 | Media | S3 bucket `wcc-media-prod` (+ CloudFront later) | |
 | Queues | Redis on the VPS, database 2 | |
 
@@ -102,3 +102,24 @@ Generate the pair **once** and keep it: changing it cuts off every device that
 already turned notifications on. Times are in `NOTIFY_TZ` and can be changed with
 `REMINDER_CRON_*` / `STATS_CRON_*`; `NOTIFICATIONS_ENABLED=false` stops them.
 On iPhone, notifications work only in the installed app (iOS 16.4+).
+
+## Database on the VPS (once)
+
+WCC uses its own database (`wcc_media`) on the PostgreSQL already on the server,
+with two roles: `wcc_owner` (migrations) and `wcc_app` (the API and worker: rows
+only, audit log append-only). Nothing of Zuri's is touched.
+
+```bash
+scp -r infra/server deploy@SERVER_IP:/tmp/wcc-setup
+ssh -t deploy@SERVER_IP 'sudo bash /tmp/wcc-setup/setup-db.sh'   # roles, database, backups; rewrites DATABASE_* in app.env
+# GitHub → Actions → Deploy → Re-run (creates the tables as wcc_owner)
+ssh -t deploy@SERVER_IP 'sudo bash /tmp/wcc-setup/import-from-neon.sh'   # one-off copy of the Neon data
+```
+
+- `setup-db.sh` saves the old Neon URL to `/etc/wcc/neon.env` for the import; delete
+  that file once you're happy.
+- The import needs `pg_dump` at least as new as Neon's PostgreSQL; the script says how
+  to install just the client if it's missing.
+- Backups: `/var/backups/wcc`, nightly at 02:30 and before every deploy's migrations,
+  14 days kept (always the newest 5). Restore: `sudo wcc-restore-db <file>`.
+- Backups stay on the same disk. For off-site copies, sync `/var/backups/wcc` elsewhere.

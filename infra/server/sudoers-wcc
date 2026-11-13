@@ -1,3 +1,4 @@
-# Installed by setup.sh as /etc/sudoers.d/wcc-deploy. deploy (and CI) may
-# restart and inspect the WCC API and worker — nothing else.
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart wcc-api, /usr/bin/systemctl restart wcc-worker, /usr/bin/systemctl is-active wcc-api, /usr/bin/systemctl is-active wcc-worker
+# Installed by setup.sh / setup-db.sh as /etc/sudoers.d/wcc-deploy. deploy (and CI) may
+# restart and inspect the WCC API and worker, and take a database backup before
+# migrating — nothing else.
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart wcc-api, /usr/bin/systemctl restart wcc-worker, /usr/bin/systemctl is-active wcc-api, /usr/bin/systemctl is-active wcc-worker, /usr/bin/systemctl start wcc-backup.service

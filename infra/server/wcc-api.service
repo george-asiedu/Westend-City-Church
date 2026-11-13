@@ -2,8 +2,8 @@
 #   journalctl -u wcc-api -f
 [Unit]
 Description=WCC Media API
-After=network-online.target redis-server.service
-Wants=network-online.target
+After=network-online.target redis-server.service postgresql.service
+Wants=network-online.target postgresql.service
 StartLimitIntervalSec=120
 StartLimitBurst=5
 
