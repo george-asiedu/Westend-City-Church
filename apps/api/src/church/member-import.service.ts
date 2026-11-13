@@ -4,12 +4,11 @@ import type { ImportRowResult } from '@wcc/shared';
 import { badRequest } from '../common/errors';
 import { toDateOnly } from '../common/pagination';
 import { normalizePhone } from './audience.service';
-import { today } from './shared';
+import { today, ChurchAccess } from './shared';
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { ChurchAccess } from './shared';
 
 export interface ImportRow {
   fullName: string;
@@ -65,7 +64,9 @@ export class MemberImportService {
               (_, d, m, y) => `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`,
             )
           : null;
-      return iso && !Number.isNaN(Date.parse(iso)) && iso <= today() ? toDateOnly(iso) : 'bad';
+      // A real calendar date (31/02 doesn't quietly become 2 March) and not in the future.
+      const real = !!iso && !Number.isNaN(Date.parse(iso)) && new Date(`${iso}T00:00:00Z`).toISOString().slice(0, 10) === iso;
+      return real && iso! <= today() ? toDateOnly(iso!) : 'bad';
     };
     const results: ImportRowResult[] = [];
     const toCreate: Array<{ data: Prisma.MemberUncheckedCreateInput; bacentaIds: string[] }> = [];

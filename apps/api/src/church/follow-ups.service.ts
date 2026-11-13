@@ -3,14 +3,13 @@ import { Prisma, type FollowUpStatus } from '@wcc/db';
 import type { FollowUpDto, Page, PastorDto } from '@wcc/shared';
 import { badRequest, forbidden, notFound } from '../common/errors';
 import { cursorArgs, fromDateOnly, pageOf, pageSize, toDateOnly } from '../common/pagination';
-import { pastorSelect, conflict, today, isLeaderRole } from './shared';
+import { pastorSelect, conflict, today, isLeaderRole, ChurchAccess } from './shared';
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { PolicyService } from '../policy/policy.service';
 import { AuditService } from '../audit/audit.service';
 import { QueueService } from '../queue/queue.service';
-import { ChurchAccess } from './shared';
 
 /** People to call or visit, with notes and assignment. */
 @Injectable()

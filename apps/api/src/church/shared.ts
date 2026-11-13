@@ -3,7 +3,7 @@ import type { Prisma } from '@wcc/db';
 import type { RosterSlotDto } from '@wcc/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PolicyService, type GroupRef } from '../policy/policy.service';
-import { MembershipService } from '../membership/membership.service';
+import { MembersService } from '../membership/members.service';
 import { AppException, forbidden } from '../common/errors';
 import { fromDateOnly } from '../common/pagination';
 import type { AuthUser } from '../common/auth-user';
@@ -57,7 +57,7 @@ export class ChurchAccess {
   constructor(
     private readonly prisma: PrismaService,
     private readonly policy: PolicyService,
-    private readonly membership: MembershipService,
+    private readonly members: MembersService,
   ) {}
 
   /** Pastors, shepherds and Super Admins. */
@@ -68,7 +68,7 @@ export class ChurchAccess {
   /** View: leaders, or the member themselves. Edit: leaders of the member's groups or a Super Admin. */
   async memberAccess(user: AuthUser, memberId: string, edit: boolean) {
     if (edit) {
-      if (!(await this.membership.canEditMember(user, memberId)))
+      if (!(await this.members.canEditMember(user, memberId)))
         throw forbidden('Only the leaders of this member’s groups or a Super Admin can change this');
       return;
     }

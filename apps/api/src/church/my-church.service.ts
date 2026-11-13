@@ -8,7 +8,8 @@ import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { MembershipService } from '../membership/membership.service';
+import { MembersService } from '../membership/members.service';
+import { GroupsService } from '../membership/groups.service';
 
 /** A member’s own view: groups, leaders, duties, attendance. */
 @Injectable()
@@ -16,7 +17,8 @@ export class MyChurchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly membership: MembershipService,
+    private readonly members: MembersService,
+    private readonly groups: GroupsService,
   ) {}
 
   private async myMemberId(user: AuthUser) {
@@ -37,7 +39,7 @@ export class MyChurchService {
       (g): g is string => !!g,
     );
     const [member, groups, attendance, roster] = await Promise.all([
-      this.membership.memberForSelf(memberId, user),
+      this.members.memberForSelf(memberId, user),
       this.prisma.churchGroup.findMany({
         where: { id: { in: groupIds } },
         select: {
@@ -71,7 +73,7 @@ export class MyChurchService {
     const birthdays = (
       await Promise.all(
         groups.map(async (g) =>
-          (await this.membership.upcomingBirthdays(user, g.id, 14, true)).map((b) => ({
+          (await this.groups.upcomingBirthdays(user, g.id, 14, true)).map((b) => ({
             ...b,
             group: g.name,
             phone: null,

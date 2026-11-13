@@ -1,5 +1,18 @@
 import { Throttle } from '@nestjs/throttler';
-import { Body, Controller, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Module,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -23,7 +36,10 @@ import {
 import { AttendanceKind, GroupType, GuestIntent } from '@wcc/db';
 import { CurrentUser, Meta, ReqMeta } from '../common/decorators';
 import type { AuthUser } from '../common/auth-user';
-import { MembershipService } from './membership.service';
+import { GroupsService } from './groups.service';
+import { MembersService } from './members.service';
+import { AttendanceService } from './attendance.service';
+import { MembershipCore } from './core';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const nullable = (_: unknown, v: unknown) => v !== null;
@@ -73,15 +89,26 @@ class GroupQuery {
 
 class MemberDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(120) fullName?: string;
-  @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(30) @Matches(/^[+\d\s()-]*$/, { message: 'Phone can only contain digits, spaces, +, - and brackets' }) phone?: string | null;
-  @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @IsEmail() @MaxLength(254) email?: string | null;
+  @IsOptional()
+  @ValidateIf(nullable)
+  @IsString()
+  @MaxLength(30)
+  @Matches(/^[+\d\s()-]*$/, { message: 'Phone can only contain digits, spaces, +, - and brackets' })
+  phone?: string | null;
+  @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @IsEmail() @MaxLength(254) email?:
+    string | null;
   @IsOptional() @ValidateIf(nullable) @IsIn(['Male', 'Female', '']) gender?: string | null;
   @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @Matches(DATE) dateOfBirth?: string | null;
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(160) location?: string | null;
   @IsOptional() @IsString() @MinLength(2) @MaxLength(60) churchRole?: string;
   @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @IsUUID() constituencyId?: string | null;
   @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @IsUUID() basontaId?: string | null;
-  @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => BacentaInputDto) bacentas?: BacentaInputDto[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => BacentaInputDto)
+  bacentas?: BacentaInputDto[];
   @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @Matches(DATE) joinedOn?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(1000) notes?: string | null;
@@ -100,7 +127,10 @@ class MemberQuery {
   @IsOptional() @ValidateIf((_, v) => v !== 'none') @IsUUID() basontaId?: string;
   @IsOptional() @IsUUID() bacentaId?: string;
   @IsOptional() @ValidateIf((_, v) => v !== 'none') @IsUUID() teamRoleId?: string;
-  @IsOptional() @Transform(({ value }) => value === true || value === 'true' || value === '1') @IsBoolean() leaders?: boolean;
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  leaders?: boolean;
   @IsOptional() @IsString() @MaxLength(60) churchRole?: string;
   @IsOptional() @IsIn(['active', 'inactive', 'all']) status?: 'active' | 'inactive' | 'all';
   @IsOptional() @IsString() @MaxLength(200) cursor?: string;
@@ -127,12 +157,17 @@ class SheetDto {
 }
 class GuestInputDto {
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(120) fullName?: string | null;
-  @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(30) @Matches(/^[+\d\s()-]*$/) phone?: string | null;
+  @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(30) @Matches(/^[+\d\s()-]*$/) phone?:
+    string | null;
   @IsEnum(GuestIntent) intent!: GuestIntent;
 }
 class BroughtDto {
   @IsInt() @Min(0) @Max(200) broughtCount!: number;
-  @IsArray() @ArrayMaxSize(200) @ValidateNested({ each: true }) @Type(() => GuestInputDto) guests!: GuestInputDto[];
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => GuestInputDto)
+  guests!: GuestInputDto[];
 }
 class PageQuery {
   @IsOptional() @IsString() @MaxLength(200) cursor?: string;
@@ -149,7 +184,10 @@ class SessionQuery extends PageQuery {
   @IsOptional() @Matches(DATE) from?: string;
   @IsOptional() @Matches(DATE) to?: string;
   /** Church services plus the groups this user looks after. */
-  @IsOptional() @Transform(({ value }) => value === true || value === 'true' || value === '1') @IsBoolean() mine?: boolean;
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  mine?: boolean;
 }
 class DaysQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(366) days?: number;
@@ -168,165 +206,239 @@ class RangeQuery {
 
 @Controller('groups')
 export class GroupsController {
-  constructor(private readonly svc: MembershipService) {}
+  constructor(
+    private readonly groups: GroupsService,
+    private readonly members: MembersService,
+    private readonly attendance: AttendanceService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() q: GroupQuery) {
-    return this.svc.listGroups(user, q.type);
+    return this.groups.listGroups(user, q.type);
   }
 
   /** Users who can be chosen as a group's pastor. */
   @Get('pastors')
   pastors(@CurrentUser() user: AuthUser) {
-    return this.svc.pastors(user);
+    return this.groups.pastors(user);
   }
 
   @Get('shepherd-candidates')
   shepherdCandidates(@CurrentUser() user: AuthUser) {
-    return this.svc.shepherdCandidates(user);
+    return this.groups.shepherdCandidates(user);
   }
 
   /** Every pastor and shepherd (Super Admin). */
   @Get('leaders')
   leaders(@CurrentUser() user: AuthUser, @Query() q: LeadersQuery) {
-    return this.svc.leaders(user, q);
+    return this.groups.leaders(user, q);
   }
 
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
-    return this.svc.getGroup(user, id);
+    return this.groups.getGroup(user, id);
   }
 
   @Get(':id/birthdays')
   birthdays(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Query() q: DaysQuery) {
-    return this.svc.upcomingBirthdays(user, id, q.days ?? 30);
+    return this.groups.upcomingBirthdays(user, id, q.days ?? 30);
   }
 
   @Get(':id/stats')
   stats(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Query() q: RangeQuery) {
-    return this.svc.groupStats(user, id, q);
+    return this.groups.groupStats(user, id, q);
   }
 
   @Post(':id/shepherds')
-  addShepherd(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ShepherdDto, @Meta() meta: ReqMeta) {
-    return this.svc.addShepherd(user, id, dto.userId, meta);
+  addShepherd(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ShepherdDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.groups.addShepherd(user, id, dto.userId, meta);
   }
 
   @Delete(':id/shepherds/:userId')
-  removeShepherd(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('userId', ParseUUIDPipe) userId: string, @Meta() meta: ReqMeta) {
-    return this.svc.removeShepherd(user, id, userId, meta);
+  removeShepherd(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.groups.removeShepherd(user, id, userId, meta);
   }
 
   @Post(':id/roles')
-  createRole(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RoleDto, @Meta() meta: ReqMeta) {
-    return this.svc.createRole(user, id, dto, meta);
+  createRole(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RoleDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.groups.createRole(user, id, dto, meta);
   }
 
   @Patch(':id/roles/:roleId')
-  updateRole(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('roleId', ParseUUIDPipe) roleId: string, @Body() dto: UpdateRoleDto, @Meta() meta: ReqMeta) {
-    return this.svc.updateRole(user, id, roleId, dto, meta);
+  updateRole(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+    @Body() dto: UpdateRoleDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.groups.updateRole(user, id, roleId, dto, meta);
   }
 
   @Delete(':id/roles/:roleId')
-  deleteRole(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('roleId', ParseUUIDPipe) roleId: string, @Meta() meta: ReqMeta) {
-    return this.svc.deleteRole(user, id, roleId, meta);
+  deleteRole(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.groups.deleteRole(user, id, roleId, meta);
   }
 
   /** Add an existing member to this group. */
   @Post(':id/members')
-  addMember(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AddMemberDto, @Meta() meta: ReqMeta) {
-    return this.svc.addToGroup(user, id, dto.memberId, dto.roleIds, meta);
+  addMember(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddMemberDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.groups.addToGroup(user, id, dto.memberId, dto.roleIds, meta);
   }
 
   @Put(':id/members/:memberId/roles')
-  setRoles(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('memberId', ParseUUIDPipe) memberId: string, @Body() dto: RoleIdsDto, @Meta() meta: ReqMeta) {
-    return this.svc.setMemberRoles(user, id, memberId, dto.roleIds, meta);
+  setRoles(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Body() dto: RoleIdsDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.groups.setMemberRoles(user, id, memberId, dto.roleIds, meta);
   }
 
   @Delete(':id/members/:memberId')
   @HttpCode(204)
-  async removeMember(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('memberId', ParseUUIDPipe) memberId: string, @Meta() meta: ReqMeta) {
-    await this.svc.removeFromGroup(user, id, memberId, meta);
+  async removeMember(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Meta() meta: ReqMeta,
+  ) {
+    await this.groups.removeFromGroup(user, id, memberId, meta);
   }
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: GroupDto, @Meta() meta: ReqMeta) {
-    return this.svc.createGroup(user, dto, meta);
+    return this.groups.createGroup(user, dto, meta);
   }
 
   @Patch(':id')
-  update(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateGroupDto, @Meta() meta: ReqMeta) {
-    return this.svc.updateGroup(user, id, dto, meta);
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateGroupDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.groups.updateGroup(user, id, dto, meta);
   }
 
   @Delete(':id')
   @HttpCode(204)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() meta: ReqMeta) {
-    await this.svc.deleteGroup(user, id, meta);
+    await this.groups.deleteGroup(user, id, meta);
   }
 }
 
 @Controller('members')
 export class MembersController {
-  constructor(private readonly svc: MembershipService) {}
+  constructor(
+    private readonly groups: GroupsService,
+    private readonly members: MembersService,
+    private readonly attendance: AttendanceService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() q: MemberQuery) {
-    return this.svc.listMembers(user, q);
+    return this.members.listMembers(user, q);
   }
 
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
-    return this.svc.getMember(user, id);
+    return this.members.getMember(user, id);
   }
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: MemberDto, @Meta() meta: ReqMeta) {
-    return this.svc.createMember(user, dto, meta);
+    return this.members.createMember(user, dto, meta);
   }
 
   @Patch(':id')
-  update(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: MemberDto, @Meta() meta: ReqMeta) {
-    return this.svc.updateMember(user, id, dto, meta);
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MemberDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.members.updateMember(user, id, dto, meta);
   }
 
   @Post(':id/move')
   @HttpCode(200)
-  move(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: MoveDto, @Meta() meta: ReqMeta) {
-    return this.svc.moveMember(user, id, dto.fromGroupId, dto.toGroupId, meta);
+  move(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MoveDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.members.moveMember(user, id, dto.fromGroupId, dto.toGroupId, meta);
   }
 
   @Delete(':id')
   @HttpCode(204)
   async remove(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() meta: ReqMeta) {
-    await this.svc.deleteMember(user, id, meta);
+    await this.members.deleteMember(user, id, meta);
   }
 }
 
 @Controller('attendance')
 export class AttendanceController {
-  constructor(private readonly svc: MembershipService) {}
+  constructor(
+    private readonly groups: GroupsService,
+    private readonly members: MembersService,
+    private readonly attendance: AttendanceService,
+  ) {}
 
   @Get('sessions')
   sessions(@CurrentUser() user: AuthUser, @Query() q: SessionQuery) {
-    return this.svc.listSessions(user, q);
+    return this.attendance.listSessions(user, q);
   }
 
   /** Opens (or creates) the session for a service/meeting on a date. */
   @Post('sessions')
   @HttpCode(200)
   createSession(@CurrentUser() user: AuthUser, @Body() dto: SessionDto, @Meta() meta: ReqMeta) {
-    return this.svc.createSession(user, dto, meta);
+    return this.attendance.createSession(user, dto, meta);
   }
 
   @Get('sessions/:id')
   sheet(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
-    return this.svc.getSheet(user, id);
+    return this.attendance.getSheet(user, id);
   }
 
   @Put('sessions/:id')
-  save(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SheetDto, @Meta() meta: ReqMeta) {
-    return this.svc.saveSheet(user, id, dto, meta);
+  save(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SheetDto,
+    @Meta() meta: ReqMeta,
+  ) {
+    return this.attendance.saveSheet(user, id, dto, meta);
   }
 
   @Put('sessions/:id/brought/:memberId')
@@ -337,19 +449,23 @@ export class AttendanceController {
     @Body() dto: BroughtDto,
     @Meta() meta: ReqMeta,
   ) {
-    return this.svc.saveBrought(user, id, memberId, dto, meta);
+    return this.attendance.saveBrought(user, id, memberId, dto, meta);
   }
 
   @Delete('sessions/:id')
   @HttpCode(204)
-  async removeSession(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Meta() meta: ReqMeta) {
-    await this.svc.deleteSession(user, id, meta);
+  async removeSession(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Meta() meta: ReqMeta,
+  ) {
+    await this.attendance.deleteSession(user, id, meta);
   }
 
   /** People brought who want to join and aren't members yet. */
   @Get('guests/pending')
   pendingGuests(@CurrentUser() user: AuthUser, @Query() q: PageQuery) {
-    return this.svc.pendingGuests(user, q);
+    return this.attendance.pendingGuests(user, q);
   }
 
   /** Super Admin: remind the leaders of basontas that haven't recorded that day. */
@@ -357,20 +473,24 @@ export class AttendanceController {
   @Post('remind')
   @HttpCode(202)
   remind(@CurrentUser() user: AuthUser, @Body() dto: RemindDto, @Meta() meta: ReqMeta) {
-    return this.svc.remindGroups(user, dto.date, dto.groupIds, meta);
+    return this.groups.remindGroups(user, dto.date, dto.groupIds, meta);
   }
 
   /** One day by constituency (sum of basontas). */
   @Get('day')
   day(@CurrentUser() user: AuthUser, @Query() q: DayQuery) {
-    return this.svc.day(user, q.date);
+    return this.attendance.day(user, q.date);
   }
 
   @Get('summary')
   summary(@CurrentUser() user: AuthUser, @Query() q: RangeQuery) {
-    return this.svc.summary(user, q);
+    return this.attendance.summary(user, q);
   }
 }
 
-@Module({ controllers: [GroupsController, MembersController, AttendanceController], providers: [MembershipService], exports: [MembershipService] })
+@Module({
+  controllers: [GroupsController, MembersController, AttendanceController],
+  providers: [MembershipCore, GroupsService, MembersService, AttendanceService],
+  exports: [MembershipCore, GroupsService, MembersService, AttendanceService],
+})
 export class MembershipModule {}

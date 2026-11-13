@@ -4,10 +4,9 @@ import { Prisma } from '@wcc/db';
 import { badRequest } from '../common/errors';
 import { cursorArgs, pageOf, pageSize } from '../common/pagination';
 import { tenDigitPhone } from './audience.service';
-import { blank } from './shared';
+import { blank, ChurchAccess } from './shared';
 import type { AuthUser } from '../common/auth-user';
 import { PrismaService } from '../prisma/prisma.service';
-import { ChurchAccess } from './shared';
 import { ENV, Env } from '../config/env';
 
 /** Welcome cards filled in by visitors (QR code). */

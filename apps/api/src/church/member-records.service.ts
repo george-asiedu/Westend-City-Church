@@ -2,12 +2,11 @@ import { Injectable } from '@nestjs/common';
 import type { MilestoneDto } from '@wcc/shared';
 import { badRequest, notFound } from '../common/errors';
 import { fromDateOnly, toDateOnly } from '../common/pagination';
-import { blank, today } from './shared';
+import { blank, today, ChurchAccess } from './shared';
 import type { AuthUser } from '../common/auth-user';
 import type { ReqMeta } from '../common/decorators';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { ChurchAccess } from './shared';
 
 /** Milestones and check-in households on a member’s record. */
 @Injectable()
