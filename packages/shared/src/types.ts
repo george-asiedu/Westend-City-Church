@@ -262,6 +262,8 @@ export interface GroupStatsDto {
   /** Bacentas: members per team role (plus "No role yet"). */
   teamRoles: Array<{ id: string | null; name: string; count: number }>;
   guests: { visit: number; joining: number; converted: number };
+  /** Constituencies: meetings are per-date sums of their basontas. */
+  sumOfBasontas: boolean;
   /** Group members at church-wide services in the period */
   churchServices: { sessions: number; averagePresent: number };
 }
@@ -278,4 +280,22 @@ export interface LeaderDto {
   lastLoginAt: string | null;
   leads: Array<{ id: string; name: string; type: GroupTypeKey }>;
   shepherds: Array<{ id: string; name: string; type: GroupTypeKey }>;
+}
+
+/** One day's attendance by constituency (each the sum of its basontas). */
+export interface DayRollupDto {
+  date: string;
+  total: number;
+  constituencies: Array<{
+    id: string;
+    name: string;
+    pastorId: string | null;
+    members: number;
+    present: number | null;
+    recorded: number;
+    missing: number;
+    basontas: Array<{ id: string; name: string; pastorId: string | null; shepherdIds: string[]; members: number; present: number | null }>;
+  }>;
+  services: Array<{ id: string; serviceType: string; title: string | null; present: number; visitors: number }>;
+  bacentas: Array<{ id: string; name: string; pastorId: string | null; present: number | null }>;
 }

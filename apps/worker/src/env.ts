@@ -38,6 +38,18 @@ const schema = z.object({
   /** Public https URL of the logo for emails. Defaults to WEB_ORIGIN/logo.png when that is https. */
   MAIL_LOGO_URL: z.preprocess((v) => (v === '' ? undefined : v), z.string().url().optional()),
   APP_NAME: z.string().default('WCC Media — The Life Cathedral'),
+
+  /** Web Push (VAPID). Generate once with: npx web-push generate-vapid-keys */
+  VAPID_PUBLIC_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  VAPID_PRIVATE_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
+  VAPID_SUBJECT: z.string().default('mailto:customersupport@zuristudios.com'),
+  NOTIFICATIONS_ENABLED: bool('true'),
+  /** Weekly schedule (cron, in NOTIFY_TZ). Reminders go out before the stats. */
+  NOTIFY_TZ: z.string().default('Africa/Accra'),
+  REMINDER_CRON_SATURDAY: z.string().default('0 20 * * 6'),
+  REMINDER_CRON_SUNDAY: z.string().default('0 13 * * 0'),
+  STATS_CRON_SATURDAY: z.string().default('0 22 * * 6'),
+  STATS_CRON_SUNDAY: z.string().default('0 18 * * 0'),
 });
 
 export type Env = z.infer<typeof schema>;

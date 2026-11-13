@@ -135,6 +135,9 @@ class SessionQuery {
   @IsOptional() @Matches(DATE) from?: string;
   @IsOptional() @Matches(DATE) to?: string;
 }
+class DayQuery {
+  @Matches(DATE) date!: string;
+}
 class RangeQuery {
   @IsOptional() @Matches(DATE) from?: string;
   @IsOptional() @Matches(DATE) to?: string;
@@ -319,6 +322,12 @@ export class AttendanceController {
   @Get('guests/pending')
   pendingGuests(@CurrentUser() user: AuthUser) {
     return this.svc.pendingGuests(user);
+  }
+
+  /** One day by constituency (sum of basontas). */
+  @Get('day')
+  day(@CurrentUser() user: AuthUser, @Query() q: DayQuery) {
+    return this.svc.day(user, q.date);
   }
 
   @Get('summary')

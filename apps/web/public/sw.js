@@ -5,7 +5,7 @@
  * - NEVER caches /api/* or media (signed, private, per-user).
  * Bump VERSION to roll every client onto a new cache.
  */
-const VERSION = 'wcc-v2';
+const VERSION = 'wcc-v3';
 const STATIC = `${VERSION}-static`;
 const PAGES = `${VERSION}-pages`;
 const PRECACHE = ['/offline', '/icons/icon-192.png', '/icons/icon-512.png', '/logo.png'];
@@ -65,4 +65,59 @@ self.addEventListener('fetch', (event) => {
         .catch(() => caches.match(req).then((hit) => hit || caches.match('/offline'))),
     );
   }
+});
+
+/* ---------------------------------------------------------------- push notifications
+ * Payload (from the worker): { title, body, url, tag }. Tapping opens url in an existing
+ * window when there is one.
+ */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: 'WCC Media', body: event.data ? event.data.text() : '' };
+  }
+  const url = typeof data.url === 'string' && data.url.startsWith('/') ? data.url : '/';
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'WCC Media', {
+      body: data.body || '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: data.tag || undefined,
+      renotify: !!data.tag,
+      data: { url },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      for (const w of wins) {
+        if (new URL(w.url).origin === self.location.origin && 'focus' in w) {
+          return w.focus().then(() => ('navigate' in w ? w.navigate(target) : undefined));
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});
+
+// The browser rotated the subscription: re-register it so notifications keep arriving.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const key = event.oldSubscription && event.oldSubscription.options && event.oldSubscription.options.applicationServerKey;
+  if (!key) return;
+  event.waitUntil(
+    self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }).then((sub) =>
+      fetch('/api/v1/notifications/subscriptions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(sub.toJSON()),
+      }),
+    ),
+  );
 });

@@ -86,3 +86,19 @@ links from there. The API can keep its sslip.io name or get `api.…` + certbot 
 only `API_INTERNAL_URL` in Vercel changes. CloudFront signed cookies
 (`MEDIA_DELIVERY_MODE=cloudfront`) need the web app and CDN on one parent
 domain (`COOKIE_DOMAIN`), so switch that on only after the domain exists.
+
+## Push notifications (once)
+
+Attendance reminders (Sat 20:00, Sun 13:00) and the day's numbers (Sat 22:00,
+Sun 18:00), Ghana time, are sent by the worker with Web Push.
+
+```bash
+cd /srv/wcc-media/current/apps/worker && npx web-push generate-vapid-keys
+sudoedit /etc/wcc/app.env      # paste VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY
+sudo systemctl restart wcc-api wcc-worker
+```
+
+Generate the pair **once** and keep it: changing it cuts off every device that
+already turned notifications on. Times are in `NOTIFY_TZ` and can be changed with
+`REMINDER_CRON_*` / `STATS_CRON_*`; `NOTIFICATIONS_ENABLED=false` stops them.
+On iPhone, notifications work only in the installed app (iOS 16.4+).

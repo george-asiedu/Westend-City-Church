@@ -12,6 +12,7 @@ export const queues = {
   maintenance: new Queue(QUEUES.MAINTENANCE, opts),
   mail: new Queue(QUEUES.MAIL, opts),
   export: new Queue(QUEUES.EXPORT, opts),
+  notify: new Queue(QUEUES.NOTIFY, opts),
 };
 
 export const enqueue = {

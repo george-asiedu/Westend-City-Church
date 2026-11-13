@@ -52,16 +52,16 @@ export function GroupStatsPanel({ groupId, groupName }: { groupId: string; group
           </div>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 [&>*]:min-w-0">
             <Card className="p-4">
-              <h3 className="mb-3 text-sm font-semibold">Attendance at meetings</h3>
+              <h3 className="mb-3 text-sm font-semibold">{s.sumOfBasontas ? 'Attendance (sum of its basontas)' : 'Attendance at meetings'}</h3>
               <ColumnTrend
                 data={s.meetings.map((m) => ({ key: m.id, label: formatDay(m.date), detail: `${formatDay(m.date)} · ${m.serviceType}${m.title ? ` · ${m.title}` : ''}`, value: m.present }))}
               />
             </Card>
             <Card className="space-y-5 p-4">
               {s.lastMeeting ? (
-                <Link href={`/church/attendance/s/${s.lastMeeting.id}`} className="block">
+                <Link href={s.sumOfBasontas ? '/church/attendance' : `/church/attendance/s/${s.lastMeeting.id}`} className="block">
                   <Doughnut
-                    title={`Last meeting · ${formatDay(s.lastMeeting.date)}`}
+                    title={`${s.sumOfBasontas ? 'Latest day' : 'Last meeting'} · ${formatDay(s.lastMeeting.date)}`}
                     centerLabel="members"
                     slices={[
                       { label: 'Present', value: s.lastMeeting.present },

@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, type GroupType, type AttendanceKind, type GuestIntent } from '@wcc/db';
+import { Prisma, dayRollup, type GroupType, type AttendanceKind, type GuestIntent } from '@wcc/db';
 import type {
   AttendanceSheetDto,
   AttendanceSummaryDto,
@@ -354,7 +354,7 @@ export class MembershipService {
         : Promise.resolve([]),
       g.type === 'BACENTA' ? this.prisma.memberBacenta.count({ where: { groupId: id, member: { isActive: true }, roles: { none: {} } } }) : Promise.resolve(0),
     ]);
-    const meetings = sessions.map((s) => ({
+    let meetings = sessions.map((s) => ({
       id: s.id,
       date: fromDateOnly(s.date)!,
       serviceType: s.serviceType,
@@ -363,6 +363,30 @@ export class MembershipService {
       visitors: s.visitorCount,
       guests: s._count.guests,
     }));
+    // A constituency with basontas counts the sum of its basontas on each date.
+    const basontaIds = g.type === 'CONSTITUENCY' ? (await this.prisma.churchGroup.findMany({ where: { parentId: id, type: 'BASONTA' }, select: { id: true } })).map((b) => b.id) : [];
+    if (basontaIds.length) {
+      const days = await this.prisma.$queryRaw<Array<{ date: Date; present: number; visitors: number; guests: number; recorded: number }>>`
+        SELECT d.date, sum(d.present)::int AS present, sum(d.visitors)::int AS visitors, sum(d.guests)::int AS guests, count(*)::int AS recorded
+        FROM (
+          SELECT s."groupId", s."date",
+                 count(DISTINCT r."memberId") AS present,
+                 (SELECT coalesce(sum(s2."visitorCount"), 0) FROM "AttendanceSession" s2 WHERE s2."groupId" = s."groupId" AND s2."date" = s."date") AS visitors,
+                 (SELECT count(*) FROM "Guest" gu JOIN "AttendanceSession" s3 ON s3.id = gu."sessionId" WHERE s3."groupId" = s."groupId" AND s3."date" = s."date") AS guests
+          FROM "AttendanceSession" s LEFT JOIN "AttendanceRecord" r ON r."sessionId" = s.id
+          WHERE s."groupId" = ANY(${basontaIds}::uuid[]) AND s."date" BETWEEN ${f}::date AND ${t}::date
+          GROUP BY s."groupId", s."date") d
+        GROUP BY d.date ORDER BY d.date`;
+      meetings = days.map((d) => ({
+        id: `day-${fromDateOnly(d.date)}`,
+        date: fromDateOnly(d.date)!,
+        serviceType: `${d.recorded} of ${basontaIds.length} basontas`,
+        title: null,
+        present: d.present,
+        visitors: d.visitors,
+        guests: d.guests,
+      }));
+    }
     const last = meetings[meetings.length - 1];
     const gi = (k: GuestIntent) => guests.find((x) => x.intent === k);
     const c = church[0] ?? { sessions: 0, present: 0 };
@@ -373,6 +397,7 @@ export class MembershipService {
       meetings,
       averagePresent: meetings.length ? Math.round((meetings.reduce((a, m) => a + m.present, 0) / meetings.length) * 10) / 10 : 0,
       lastMeeting: last ? { id: last.id, date: last.date, present: last.present, absent: Math.max(0, members - last.present) } : null,
+      sumOfBasontas: basontaIds.length > 0,
       roles: roles.map((r) => ({ role: r.churchRole, count: r._count._all })),
       teamRoles: [
         ...teamRoles.map((r) => ({ id: r.id, name: r.name, count: r._count.members })),
@@ -1022,6 +1047,27 @@ export class MembershipService {
       take: 200,
     });
     return rows.map((g) => this.guestDto(g));
+  }
+
+  /**
+   * One day's attendance by constituency (each the sum of its basontas). Super Admins see
+   * everything; head pastors and basonta leaders see only their part.
+   */
+  async day(user: AuthUser, date: string) {
+    this.assertView(user);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw badRequest('INVALID_DATE', 'Choose a valid date');
+    const r = await dayRollup(this.prisma, date);
+    if (this.policy.canViewChurchStats(user)) return r;
+    const mine = (id: string | null, shepherds: string[] = []) => id === user.id || shepherds.includes(user.id);
+    return {
+      ...r,
+      services: r.services,
+      bacentas: r.bacentas.filter((b) => mine(b.pastorId)),
+      constituencies: r.constituencies
+        .map((c) => (mine(c.pastorId) ? c : { ...c, basontas: c.basontas.filter((b) => mine(b.pastorId, b.shepherdIds)) }))
+        .filter((c) => mine(c.pastorId) || c.basontas.length),
+      total: r.constituencies.filter((c) => mine(c.pastorId)).reduce((a, c) => a + (c.present ?? 0), 0),
+    };
   }
 
   async summary(user: AuthUser, q: { from?: string; to?: string }): Promise<AttendanceSummaryDto> {

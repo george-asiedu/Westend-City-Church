@@ -1,7 +1,9 @@
 import { Worker, type Job } from 'bullmq';
 import { mkdir } from 'node:fs/promises';
 import { exiftool } from 'exiftool-vendored';
-import { MAINTENANCE_JOBS, QUEUES } from '@wcc/shared';
+import { notify } from './processors/notify';
+import { pushConfigured } from './lib/push';
+import { MAINTENANCE_JOBS, NOTIFY_JOBS, QUEUES } from '@wcc/shared';
 import { env } from './env';
 import { connection, queues } from './queues';
 import { log } from './lib/log';
@@ -47,9 +49,26 @@ async function scheduleMaintenance(): Promise<void> {
     await queues.maintenance.upsertJobScheduler(name, { pattern, tz }, { name, opts: { removeOnComplete: 50, removeOnFail: 200 } });
 }
 
+/** Weekly push: reminders to record attendance, then the day's numbers. */
+async function scheduleNotifications(): Promise<void> {
+  const plan: Array<[string, string, string]> = [
+    ['reminder-saturday', NOTIFY_JOBS.ATTENDANCE_REMINDER, env.REMINDER_CRON_SATURDAY],
+    ['reminder-sunday', NOTIFY_JOBS.ATTENDANCE_REMINDER, env.REMINDER_CRON_SUNDAY],
+    ['stats-saturday', NOTIFY_JOBS.WEEKEND_STATS, env.STATS_CRON_SATURDAY],
+    ['stats-sunday', NOTIFY_JOBS.WEEKEND_STATS, env.STATS_CRON_SUNDAY],
+  ];
+  for (const [id, name, pattern] of plan) {
+    if (env.NOTIFICATIONS_ENABLED && pushConfigured)
+      await queues.notify.upsertJobScheduler(id, { pattern, tz: env.NOTIFY_TZ }, { name, opts: { removeOnComplete: 50, removeOnFail: 200 } });
+    else await queues.notify.removeJobScheduler(id);
+  }
+  if (!pushConfigured) log.warn('push notifications off: set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY');
+}
+
 async function main(): Promise<void> {
   await mkdir(env.WORKER_TMP_DIR, { recursive: true });
   await scheduleMaintenance();
+  await scheduleNotifications();
 
   const image = worker(QUEUES.IMAGE, env.IMAGE_CONCURRENCY, processImage);
   // Long transcodes: generous lock so a busy CPU does not make BullMQ think the job stalled.
@@ -63,6 +82,7 @@ async function main(): Promise<void> {
     worker(QUEUES.MAINTENANCE, 1, maintenance),
     worker(QUEUES.MAIL, 2, sendMail),
     worker(QUEUES.EXPORT, 1, buildExport, { lockDuration: 10 * 60_000 }),
+    worker(QUEUES.NOTIFY, 1, notify),
   ];
   log.info({ queues: Object.values(QUEUES), tmp: env.WORKER_TMP_DIR }, 'worker started');
 

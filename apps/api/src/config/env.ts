@@ -58,6 +58,8 @@ const schema = z
     SHARE_LINKS_ENABLED: bool.default('true'),
     PUBLIC_HIGHLIGHTS_ENABLED: bool,
     SWAGGER_ENABLED: bool,
+    /** Web Push public key (the worker holds the private key). */
+    VAPID_PUBLIC_KEY: z.preprocess((v) => (v === '' ? undefined : v), z.string().optional()),
   })
   .superRefine((v, ctx) => {
     if (v.MEDIA_DELIVERY_MODE === 'cloudfront') {

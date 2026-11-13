@@ -78,25 +78,29 @@ model User {
   lockedUntil       DateTime?
   lastLoginAt       DateTime?
   avatarKey         String?
+  /// Push notification preferences.
+  notifyReminders   Boolean    @default(true)
+  notifyStats       Boolean    @default(true)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  sessions        Session[]
-  categoryAccess  UserCategoryAccess[]
-  eventsCreated   Event[]              @relation("EventCreatedBy")
-  mediaUploaded   MediaAsset[]         @relation("MediaUploadedBy")
-  invitationsSent Invitation[]         @relation("InvitedBy")
-  auditLogs       AuditLog[]
-  passwordResets  PasswordResetToken[]
-  emailChanges    EmailChangeToken[]
-  pastoredGroups  ChurchGroup[]        @relation("GroupPastor")
-  groupsCreated   ChurchGroup[]        @relation("GroupCreatedBy")
-  membersCreated  Member[]             @relation("MemberCreatedBy")
-  attendanceTaken AttendanceSession[]  @relation("AttendanceRecordedBy")
-  shepherding     GroupShepherd[]
-  recoveryCodes   RecoveryCode[]
-  shareLinks      ShareLink[]
-  exports         ExportJob[]
+  sessions          Session[]
+  categoryAccess    UserCategoryAccess[]
+  eventsCreated     Event[]              @relation("EventCreatedBy")
+  mediaUploaded     MediaAsset[]         @relation("MediaUploadedBy")
+  invitationsSent   Invitation[]         @relation("InvitedBy")
+  auditLogs         AuditLog[]
+  passwordResets    PasswordResetToken[]
+  emailChanges      EmailChangeToken[]
+  pastoredGroups    ChurchGroup[]        @relation("GroupPastor")
+  groupsCreated     ChurchGroup[]        @relation("GroupCreatedBy")
+  membersCreated    Member[]             @relation("MemberCreatedBy")
+  attendanceTaken   AttendanceSession[]  @relation("AttendanceRecordedBy")
+  shepherding       GroupShepherd[]
+  pushSubscriptions PushSubscription[]
+  recoveryCodes     RecoveryCode[]
+  shareLinks        ShareLink[]
+  exports           ExportJob[]
 
   @@index([role])
   @@index([status])
@@ -611,4 +615,19 @@ model Guest {
   @@index([sessionId])
   @@index([broughtById])
   @@index([intent, convertedMemberId])
+}
+
+/// A browser/app push subscription (Web Push) for one device.
+model PushSubscription {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?   @db.VarChar(300)
+  createdAt     DateTime  @default(now())
+  lastSuccessAt DateTime?
+
+  @@index([userId])
 }

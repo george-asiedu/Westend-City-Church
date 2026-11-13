@@ -11,6 +11,7 @@ import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
 import { ColumnTrend, Doughnut, RankedBars } from '@/components/church/charts';
 import { GroupStatsPanel, Stat } from '@/components/church/group-stats';
+import { DayBreakdown } from '@/components/church/day-breakdown';
 import { api } from '@/lib/api';
 import { useMe } from '@/lib/queries';
 import { addDays, canAddMembers, downloadCsv, formatDay, localDate, mk, sessionName, useGroups, type SessionRow, type Summary } from '@/lib/membership';
@@ -403,6 +404,7 @@ export default function AttendancePage() {
       <ChurchTabs />
       <div className="space-y-4">
         {canAddMembers(me.data) && <PendingGuests />}
+        <DayBreakdown />
         {p.canViewChurchStats ? <ChurchStats /> : <MyGroupStats />}
         <RecentSessions me={me.data} />
       </div>

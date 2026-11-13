@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input, PasswordInput } from '@/components/ui/form';
 import { Badge, Card, PageHeader, PageLoader } from '@/components/ui/misc';
 import { NewPasswordFields } from '@/components/layout/password-form';
+import { NotificationsCard } from '@/components/layout/notifications-card';
 import { api, errorMessage } from '@/lib/api';
 import { qk, useMe } from '@/lib/queries';
 import { formatDateTime } from '@/lib/utils';
@@ -350,6 +351,7 @@ function AccountInner() {
         <Profile me={me.data} />
         <ChangeEmail me={me.data} />
         <ChangePassword />
+        {me.data.permissions.canViewMembership && <NotificationsCard />}
         <Sessions />
       </div>
     </>

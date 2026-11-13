@@ -6,7 +6,27 @@ export const QUEUES = {
   MAINTENANCE: 'maintenance',
   MAIL: 'mail',
   EXPORT: 'export',
+  NOTIFY: 'notify',
 } as const;
+
+/** Push-notification jobs. Reminders and stats run on a weekly schedule in the worker. */
+export const NOTIFY_JOBS = {
+  ATTENDANCE_REMINDER: 'attendance-reminder',
+  WEEKEND_STATS: 'weekend-stats',
+  TEST: 'test',
+} as const;
+export interface NotifyTestJob {
+  userId: string;
+}
+/** What the service worker shows. */
+export interface PushPayload {
+  title: string;
+  body: string;
+  /** Relative URL opened on tap. */
+  url: string;
+  /** Same tag replaces an earlier notification instead of stacking. */
+  tag?: string;
+}
 
 export interface ProcessMediaJob {
   mediaId: string;
