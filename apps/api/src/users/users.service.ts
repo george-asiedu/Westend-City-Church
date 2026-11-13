@@ -34,7 +34,7 @@ export class UsersService {
     private readonly me: MeService,
   ) {}
 
-  /** 20 at a time, active first then by name. */
+  /** 10 at a time, active first then by name. */
   async list(user: AuthUser, q: { role?: Role; status?: UserStatus; q?: string; cursor?: string; limit?: number }) {
     if (!this.policy.canListUsers(user)) throw forbidden();
     const take = pageSize(q.limit);

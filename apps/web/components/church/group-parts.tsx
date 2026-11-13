@@ -251,8 +251,8 @@ export function AddExistingDialog({ g, open, onClose }: { g: GroupDto; open: boo
     if (!open) (setQ(''), setRoleIds([]));
   }, [open]);
   const results = useQuery({
-    queryKey: mk.members({ q: debounced, limit: 20, pick: g.id }),
-    queryFn: () => api<MemberPage>('/members', { query: { q: debounced, limit: 20 } }),
+    queryKey: mk.members({ q: debounced, limit: 10, pick: g.id }),
+    queryFn: () => api<MemberPage>('/members', { query: { q: debounced, limit: 10 } }),
     enabled: open && debounced.length >= 2,
   });
   const inGroup = (m: MemberDto) => (g.type === 'CONSTITUENCY' ? m.constituency?.id === g.id : g.type === 'BASONTA' ? m.basonta?.id === g.id : m.bacentas.some((b) => b.id === g.id));

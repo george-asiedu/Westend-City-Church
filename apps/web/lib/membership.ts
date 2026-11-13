@@ -115,11 +115,11 @@ export function bacentaLabel(b: { name: string; roles: Array<{ name: string }> }
 import { useInfiniteQuery } from '@tanstack/react-query';
 import type { Page } from '@wcc/shared';
 
-/** Lists load 20 at a time; `more()` fetches the next page. */
+/** Lists load 10 at a time; `more()` fetches the next page. */
 export function useCursorList<T>(key: readonly unknown[], path: string, query: Record<string, string | number | boolean | undefined | null> = {}, enabled = true) {
   const q = useInfiniteQuery({
     queryKey: [...key, 'pages'],
-    queryFn: ({ pageParam }) => api<Page<T> & Record<string, unknown>>(path, { query: { ...query, cursor: pageParam, limit: 20 } }),
+    queryFn: ({ pageParam }) => api<Page<T> & Record<string, unknown>>(path, { query: { ...query, cursor: pageParam, limit: 10 } }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled,

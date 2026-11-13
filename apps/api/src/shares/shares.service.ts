@@ -132,7 +132,7 @@ export class SharesService {
     };
   }
 
-  /** Newest first, 20 at a time. */
+  /** Newest first, 10 at a time. */
   async list(user: AuthUser, eventId?: string, cursor?: string, limit?: number) {
     this.assertEnabled();
     const take = pageSize(limit);

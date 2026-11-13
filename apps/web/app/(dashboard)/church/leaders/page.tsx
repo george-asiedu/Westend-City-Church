@@ -26,7 +26,7 @@ export default function LeadersPage() {
     const t = setTimeout(() => setDebounced(term.trim()), 300);
     return () => clearTimeout(t);
   }, [term]);
-  // Filtered on the server, 20 at a time; the stats cover everyone.
+  // Filtered on the server, 10 at a time; the stats cover everyone.
   const params = { q: debounced || undefined, role: role === 'all' ? undefined : role, show: show === 'all' ? undefined : show };
   const q = useCursorList<Leader>([...mk.leaders, params], '/groups/leaders', params, !!me.data?.permissions.canManageMembership);
   type Stats = { pastors: number; shepherds: number; newPastors: number; newShepherds: number; unassigned: number; neverSignedIn: number };

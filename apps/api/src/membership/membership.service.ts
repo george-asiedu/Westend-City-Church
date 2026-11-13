@@ -414,7 +414,7 @@ export class MembershipService {
   }
 
   /**
-   * Super Admin: pastors and shepherds (newest first), 20 at a time, with the groups they
+   * Super Admin: pastors and shepherds (newest first), 10 at a time, with the groups they
    * lead or shepherd. Stats cover everyone, whatever the filters.
    */
   async leaders(
@@ -1113,7 +1113,7 @@ export class MembershipService {
     return rows.map((r) => r.id);
   }
 
-  /** Newest first, 20 at a time. `mine`: church services plus the groups this user looks after. */
+  /** Newest first, 10 at a time. `mine`: church services plus the groups this user looks after. */
   async listSessions(
     user: AuthUser,
     q: { kind?: AttendanceKind; groupId?: string; from?: string; to?: string; mine?: boolean; cursor?: string; limit?: number },
@@ -1152,7 +1152,7 @@ export class MembershipService {
     };
   }
 
-  /** People brought who want to join and haven't been added as members yet (newest first, 20 at a time). */
+  /** People brought who want to join and haven't been added as members yet (newest first, 10 at a time). */
   async pendingGuests(user: AuthUser, q: { cursor?: string; limit?: number } = {}): Promise<Page<GuestDto> & { total: number }> {
     if (!this.policy.canAddMembers(user)) throw forbidden();
     const take = pageSize(q.limit);

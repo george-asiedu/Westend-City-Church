@@ -26,8 +26,8 @@ export const toDateOnly = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`
 export const fromDateOnly = (d: Date | null): string | null => (d ? d.toISOString().slice(0, 10) : null);
 
 // ---------------------------------------------------------------- id cursors (lists)
-/** Lists show 20 at a time by default (max 200, e.g. for CSV export loops). */
-export const pageSize = (limit?: number, def = 20, max = 200): number => Math.max(1, Math.min(max, Math.floor(limit && !Number.isNaN(limit) ? limit : def)));
+/** Lists show 10 at a time by default (max 200, e.g. for CSV export loops). */
+export const pageSize = (limit?: number, def = 10, max = 200): number => Math.max(1, Math.min(max, Math.floor(limit && !Number.isNaN(limit) ? limit : def)));
 
 /**
  * Prisma args for keyset paging by row id: fetch one extra row to know if there's more.
