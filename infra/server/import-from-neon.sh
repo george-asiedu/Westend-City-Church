@@ -103,4 +103,4 @@ local_sql -c 'ANALYZE' >/dev/null
 
 log "Done"
 echo "All data copied. The API and worker are starting again on the local database."
-echo "Once you're happy, you can delete /etc/wcc/neon.env (it holds the Neon password)."
+echo "Keep /etc/wcc/neon.env: from tonight, each backup is copied back to this Neon database as an off-server restore copy (wcc-neon-copy)."

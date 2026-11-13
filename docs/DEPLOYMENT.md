@@ -116,10 +116,16 @@ ssh -t deploy@SERVER_IP 'sudo bash /tmp/wcc-setup/setup-db.sh'   # roles, databa
 ssh -t deploy@SERVER_IP 'sudo bash /tmp/wcc-setup/import-from-neon.sh'   # one-off copy of the Neon data
 ```
 
-- `setup-db.sh` saves the old Neon URL to `/etc/wcc/neon.env` for the import; delete
-  that file once you're happy.
+- `setup-db.sh` saves the old Neon URL to `/etc/wcc/neon.env` for the import. **Keep it**:
+  that Neon database then becomes the off-server restore copy (below).
 - The import needs `pg_dump` at least as new as Neon's PostgreSQL; the script says how
   to install just the client if it's missing.
 - Backups: `/var/backups/wcc`, nightly at 02:30 and before every deploy's migrations,
   14 days kept (always the newest 5). Restore: `sudo wcc-restore-db <file>`.
-- Backups stay on the same disk. For off-site copies, sync `/var/backups/wcc` elsewhere.
+- **Neon restore copy**: after each nightly backup, `wcc-neon-copy` loads the newest dump
+  into the Neon database in `/etc/wcc/neon.env`, replacing it (one transaction: on any
+  error Neon keeps the previous copy). It refuses to run while the app still uses that
+  Neon database, so it only starts after the move. Run it by hand: `sudo wcc-neon-copy`;
+  see the result: `journalctl -u wcc-backup -n 30`. Neon must run PostgreSQL ≥ the server's.
+- If the VPS is lost: point `DATABASE_URL`/`DATABASE_MIGRATION_URL` at Neon on the new
+  server (or `pg_dump` it into the new server's PostgreSQL) and deploy.

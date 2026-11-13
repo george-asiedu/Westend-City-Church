@@ -14,7 +14,8 @@
 # Also installs a nightly pg_dump (wcc-backup.timer, 14 days kept) and lets deploys
 # take a backup before migrating. Passwords live in /etc/wcc/db.env (root only).
 # The current DATABASE_* lines in /etc/wcc/app.env are saved to /etc/wcc/neon.env
-# so import-from-neon.sh can copy the data across. Safe to re-run.
+# so import-from-neon.sh can copy the data across; afterwards that same Neon database
+# becomes the nightly off-server restore copy (neon-copy.sh). Safe to re-run.
 
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -103,6 +104,7 @@ log "Backups"
 install -d -m 700 -o postgres -g postgres "${BACKUP_DIR}"
 install -m 755 "${HERE}/backup-db.sh" /usr/local/sbin/wcc-backup-db
 install -m 755 "${HERE}/restore-db.sh" /usr/local/sbin/wcc-restore-db
+install -m 755 "${HERE}/neon-copy.sh" /usr/local/sbin/wcc-neon-copy
 for u in wcc-backup.service wcc-backup.timer wcc-api.service wcc-worker.service; do
   install -m 644 "${HERE}/${u}" "/etc/systemd/system/${u}"
 done
@@ -123,4 +125,6 @@ Next:
   2. Copy your data from Neon:  sudo bash /tmp/wcc-setup/import-from-neon.sh
   3. Check:  curl -fsS http://127.0.0.1:5070/api/v1/health/ready
 Backups: ${BACKUP_DIR} nightly at 02:30 (14 days). Restore: sudo wcc-restore-db <file>
+After each backup, Neon (${ENV_DIR}/neon.env) is refreshed as an off-server restore copy,
+once the app no longer uses it. Run it now with: sudo wcc-neon-copy
 NEXT
