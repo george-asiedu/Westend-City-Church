@@ -140,12 +140,34 @@ function EditUserDialog({ user, onClose }: { user: UserRow | null; onClose: () =
             description={user.status === 'SUSPENDED' ? undefined : 'They are signed out immediately and cannot sign in.'}
             onConfirm={() =>
               api(`/users/${user.id}`, { method: 'PATCH', body: { status: user.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED' } })
-                .then(() => (invalidate(), close()))
+                .then(() => (toast.success(user.status === 'SUSPENDED' ? `${user.fullName} reactivated` : `${user.fullName} suspended`), invalidate(), close()))
                 .catch((e) => toast.error(errorMessage(e)))
             }
           >
             {user.status === 'SUSPENDED' ? 'Reactivate' : 'Suspend'}
           </ConfirmButton>
+          {me.data?.role === 'SUPER_ADMIN' && me.data.id !== user.id && (
+            <ConfirmButton
+              variant="danger"
+              danger
+              title={`Delete ${user.fullName}?`}
+              description="This permanently removes their account and signs them out. Their events and uploads are kept and moved to you; their share links stop working. This cannot be undone. To block access temporarily, use Suspend instead."
+              confirmLabel="Delete user"
+              onConfirm={() =>
+                api<{ transferredEvents: number; transferredMedia: number }>(`/users/${user.id}`, { method: 'DELETE' })
+                  .then((r) => {
+                    toast.success(
+                      `${user.fullName} deleted` + (r.transferredEvents || r.transferredMedia ? `. ${r.transferredEvents} events and ${r.transferredMedia} files moved to you.` : ''),
+                    );
+                    invalidate();
+                    close();
+                  })
+                  .catch((e) => toast.error(errorMessage(e)))
+              }
+            >
+              Delete
+            </ConfirmButton>
+          )}
           <Button loading={save.isPending} onClick={() => save.mutate()}>
             Save
           </Button>

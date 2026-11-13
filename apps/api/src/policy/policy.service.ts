@@ -130,6 +130,10 @@ export class PolicyService {
     return u.role === 'SUPER_ADMIN' || !!u.rolePermissions?.has('MANAGE_CATEGORIES');
   }
 
+  canDeleteUser(u: Principal): boolean {
+    return u.role === 'SUPER_ADMIN';
+  }
+
   canManageRolePermissions(u: Principal): boolean {
     return u.role === 'SUPER_ADMIN';
   }

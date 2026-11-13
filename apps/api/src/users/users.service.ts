@@ -116,4 +116,38 @@ export class UsersService {
     await this.audit.record({ actorId: user.id, action: 'USER_SESSIONS_REVOKED', entityType: 'USER', entityId: id, metadata: { count }, meta });
     return { revoked: count };
   }
+
+  /**
+   * Permanently deletes an account. Their events and uploads are kept and transferred to
+   * the admin doing the delete; their share links stop working; audit entries keep the
+   * history (actor becomes empty).
+   */
+  async remove(user: AuthUser, id: string, meta: ReqMeta): Promise<{ transferredEvents: number; transferredMedia: number }> {
+    if (!this.policy.canDeleteUser(user)) throw forbidden('Only a Super Admin can delete users');
+    if (id === user.id) throw badRequest('CANNOT_DELETE_SELF', 'You cannot delete your own account');
+    const target = await this.prisma.user.findUnique({ where: { id } });
+    if (!target) throw notFound('User');
+    if (target.role === 'SUPER_ADMIN') {
+      const others = await this.prisma.user.count({ where: { role: 'SUPER_ADMIN', status: 'ACTIVE', id: { not: id } } });
+      if (others === 0) throw badRequest('LAST_SUPER_ADMIN', 'There must be at least one active Super Admin');
+    }
+    await this.sessions.revokeAllForUser(id, 'USER_DELETED');
+    const result = await this.prisma.$transaction(async (tx) => {
+      const ev = await tx.event.updateMany({ where: { createdById: id }, data: { createdById: user.id } });
+      const media = await tx.mediaAsset.updateMany({ where: { uploadedById: id }, data: { uploadedById: user.id } });
+      await tx.invitation.updateMany({ where: { invitedById: id }, data: { invitedById: user.id } });
+      await tx.shareLink.deleteMany({ where: { createdById: id } });
+      await tx.user.delete({ where: { id } });
+      return { transferredEvents: ev.count, transferredMedia: media.count };
+    });
+    await this.audit.record({
+      actorId: user.id,
+      action: 'USER_DELETED',
+      entityType: 'USER',
+      entityId: id,
+      metadata: { email: target.email, fullName: target.fullName, role: target.role, ...result },
+      meta,
+    });
+    return result;
+  }
 }
