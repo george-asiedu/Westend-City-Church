@@ -118,7 +118,7 @@ export function bacentaLabel(b: { name: string; roles: Array<{ name: string }> }
 // ---------------------------------------------------------------- cursor pagination
 import { keepPreviousData, useQuery as usePageQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import type { Page } from '@wcc/shared';
+import { whatsappNumber, type Page } from '@wcc/shared';
 
 export const PAGE_SIZE = 10;
 
@@ -176,11 +176,7 @@ export async function fetchAll<T>(path: string, query: Record<string, string | n
 
 /** WhatsApp chat link for a Ghana number in any common form (0XX…, +233…, 233…). */
 export function whatsappLink(phone: string, text?: string): string {
-  let d = phone.replace(/\D/g, '');
-  if (d.startsWith('00')) d = d.slice(2);
-  if (d.startsWith('0')) d = `233${d.slice(1)}`;
-  else if (d.length === 9) d = `233${d}`;
-  return `https://wa.me/${d}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+  return `https://wa.me/${whatsappNumber(phone)}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
 
 /** Previous/Next over a list that's already loaded (same shape the Pager expects). */

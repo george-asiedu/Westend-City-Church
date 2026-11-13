@@ -1,14 +1,6 @@
 import type { PushPayload } from '@wcc/shared';
 
-/** Ghana numbers in any common form → "0XXXXXXXXX" so members and app users match. */
-export function normalizePhone(p: string | null | undefined): string | null {
-  if (!p) return null;
-  let d = p.replace(/\D/g, '');
-  if (d.startsWith('00')) d = d.slice(2);
-  if (d.startsWith('233') && d.length === 12) d = `0${d.slice(3)}`;
-  if (d.length === 9) d = `0${d}`;
-  return d.length >= 9 ? d : null;
-}
+export { normalizePhone } from '@wcc/shared';
 
 const isLeap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 

@@ -1,3 +1,4 @@
+import { forgetLocalSession } from '../common/guards';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import Redis from 'ioredis';
@@ -95,7 +96,7 @@ export class SessionService {
       });
     });
     if (!next) return { ok: false, reason: 'race' };
-    await this.redis.set(`sess:${s.id}`, '0', 'EX', 60);
+    await this.markRevoked([s.id]);
     return {
       ok: true,
       userId: s.userId,
@@ -111,13 +112,13 @@ export class SessionService {
 
   async revoke(sessionId: string, reason: string): Promise<void> {
     await this.prisma.session.updateMany({ where: { id: sessionId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: reason } });
-    await this.redis.set(`sess:${sessionId}`, '0', 'EX', 60);
+    await this.markRevoked([sessionId]);
   }
 
   async revokeFamily(familyId: string, reason: string): Promise<void> {
     const sessions = await this.prisma.session.findMany({ where: { familyId }, select: { id: true } });
     await this.prisma.session.updateMany({ where: { familyId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: reason } });
-    await Promise.all(sessions.map((x) => this.redis.set(`sess:${x.id}`, '0', 'EX', 60)));
+    await this.markRevoked(sessions.map((x) => x.id));
   }
 
   /** All of a user's sessions, optionally keeping one (the caller's). */
@@ -131,7 +132,13 @@ export class SessionService {
       where: { id: { in: sessions.map((x) => x.id) } },
       data: { revokedAt: new Date(), revokedReason: reason },
     });
-    await Promise.all(sessions.map((x) => this.redis.set(`sess:${x.id}`, '0', 'EX', 60)));
+    await this.markRevoked(sessions.map((x) => x.id));
     return sessions.length;
+  }
+
+  /** Tells the auth guard (Redis + this process's short cache) that these sessions are over. */
+  private async markRevoked(ids: string[]): Promise<void> {
+    for (const id of ids) forgetLocalSession(id);
+    await Promise.all(ids.map((id) => this.redis.set(`sess:${id}`, '0', 'EX', 60)));
   }
 }

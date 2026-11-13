@@ -1,3 +1,4 @@
+import { clearRolePermissionCache } from '../common/principal';
 import { Body, Controller, Get, Put } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsIn, ValidateNested } from 'class-validator';
@@ -46,6 +47,7 @@ export class RolePermissionsController {
       this.prisma.rolePermission.deleteMany({}),
       this.prisma.rolePermission.createMany({ data: unique.map((g) => ({ role: g.role, permission: g.permission })) }),
     ]);
+    clearRolePermissionCache();
     await this.audit.record({ actorId: user.id, action: 'ROLE_PERMISSIONS_UPDATED', entityType: 'SETTINGS', metadata: { grants: unique.map((g) => `${g.role}:${g.permission}`) }, meta });
     return { roles: GRANTABLE_ROLES, permissions: PERMISSIONS, grants: unique };
   }

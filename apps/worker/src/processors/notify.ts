@@ -4,11 +4,11 @@ import { NOTIFY_JOBS, type NotifyTestJob, type PushJob, type RemindGroupsJob } f
 import { env } from '../env';
 import { prisma } from '../lib/prisma';
 import { log } from '../lib/log';
-import { pushToUsers } from '../lib/push';
+import { pushMessages, pushToUsers } from '../lib/push';
 import { dayName, reminderMessages, statsMessages } from '../lib/notify-messages';
 import { queues } from '../queues';
 import { announcementAudience, usersForMembers } from '../lib/audience';
-import { birthdayMessages, birthdayOn, normalizePhone, type BirthdayPerson } from '../lib/birthdays';
+import { birthdayMessages, type BirthdayPerson } from '../lib/birthdays';
 
 /** Today's date (YYYY-MM-DD) in the church's time zone. */
 export function todayIn(tz: string, now = new Date()): string {
@@ -16,8 +16,7 @@ export function todayIn(tz: string, now = new Date()): string {
 }
 
 async function sendAll(messages: Map<string, import('@wcc/shared').PushPayload>, kind: 'reminder' | 'stats' | 'birthday') {
-  let sent = 0;
-  for (const [userId, payload] of messages) sent += (await pushToUsers([userId], payload, kind)).sent;
+  const { sent } = await pushMessages(messages, kind);
   return { recipients: messages.size, sent };
 }
 
@@ -92,37 +91,43 @@ export async function notify(job: Job): Promise<unknown> {
  * members of those groups (matched to their member record by email or phone).
  */
 async function birthdayPeople(date: string): Promise<BirthdayPerson[]> {
-  const candidates = await prisma.member.findMany({
-    where: { isActive: true, dateOfBirth: { not: null } },
-    select: { id: true, fullName: true, email: true, phone: true, dateOfBirth: true, constituencyId: true, basontaId: true, bacentas: { select: { groupId: true } } },
+  // Let the database find today's birthdays (29 Feb ones are celebrated on 28 Feb in other years).
+  const [y, mo, d] = date.split('-').map(Number) as [number, number, number];
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const extraFeb29 = mo === 2 && d === 28 && !leap;
+  const ids = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "Member"
+    WHERE "isActive" AND "dateOfBirth" IS NOT NULL
+      AND ((EXTRACT(MONTH FROM "dateOfBirth") = ${mo} AND EXTRACT(DAY FROM "dateOfBirth") = ${d})
+        OR (${extraFeb29} AND EXTRACT(MONTH FROM "dateOfBirth") = 2 AND EXTRACT(DAY FROM "dateOfBirth") = 29))`;
+  if (!ids.length) return [];
+  const today = await prisma.member.findMany({
+    where: { id: { in: ids.map((r) => r.id) } },
+    select: { id: true, fullName: true, constituencyId: true, basontaId: true, bacentas: { select: { groupId: true } } },
   });
-  const today = candidates.filter((c) => birthdayOn(c.dateOfBirth!.toISOString().slice(0, 10), date));
-  if (!today.length) return [];
-  const groupIdsOf = (x: (typeof today)[number]) => [x.basontaId, x.constituencyId, ...x.bacentas.map((b) => b.groupId)].filter((g): g is string => !!g);
+  const groupIdsOf = (x: { basontaId: string | null; constituencyId: string | null; bacentas: Array<{ groupId: string }> }) =>
+    [x.basontaId, x.constituencyId, ...x.bacentas.map((b) => b.groupId)].filter((g): g is string => !!g);
   const allGroupIds = [...new Set(today.flatMap(groupIdsOf))];
-  const [groups, groupMembers, users] = await Promise.all([
+  const [groups, groupMembers] = await Promise.all([
     prisma.churchGroup.findMany({
       where: { id: { in: allGroupIds }, isActive: true },
       select: { id: true, name: true, pastorId: true, shepherds: { select: { userId: true } }, parent: { select: { pastorId: true } } },
     }),
     prisma.member.findMany({
       where: { isActive: true, OR: [{ constituencyId: { in: allGroupIds } }, { basontaId: { in: allGroupIds } }, { bacentas: { some: { groupId: { in: allGroupIds } } } }] },
-      select: { id: true, email: true, phone: true, constituencyId: true, basontaId: true, bacentas: { select: { groupId: true } } },
+      select: { id: true, constituencyId: true, basontaId: true, bacentas: { select: { groupId: true } } },
     }),
-    prisma.user.findMany({ where: { status: 'ACTIVE' }, select: { id: true, email: true, phone: true, memberId: true } }),
   ]);
-  const byMember = new Map(users.flatMap((u) => (u.memberId ? [[u.memberId, u.id] as const] : [])));
-  const byEmail = new Map(users.flatMap((u) => (u.email ? [[u.email.toLowerCase(), u.id] as const] : [])));
-  const byPhone = new Map(users.flatMap((u) => (normalizePhone(u.phone) ? [[normalizePhone(u.phone)!, u.id] as const] : [])));
-  const userOf = (x: { id: string; email: string | null; phone: string | null }) => byMember.get(x.id) || (x.email && byEmail.get(x.email.toLowerCase())) || (normalizePhone(x.phone) && byPhone.get(normalizePhone(x.phone)!)) || null;
+  // App users for the celebrants and their group-mates (shared matching rules).
+  const userOfMember = await usersForMembers([...new Set([...today.map((t) => t.id), ...groupMembers.map((m) => m.id)])]);
   const gById = new Map(groups.map((g) => [g.id, g]));
   // App users per group, through their member record.
   const usersIn = new Map<string, Set<string>>();
   for (const gm of groupMembers) {
-    const u = userOf(gm);
+    const u = userOfMember.get(gm.id);
     if (!u) continue;
-    for (const g of [gm.constituencyId, gm.basontaId, ...gm.bacentas.map((b) => b.groupId)]) {
-      if (!g || !gById.has(g)) continue;
+    for (const g of groupIdsOf(gm)) {
+      if (!gById.has(g)) continue;
       if (!usersIn.has(g)) usersIn.set(g, new Set());
       usersIn.get(g)!.add(u);
     }
@@ -133,7 +138,7 @@ async function birthdayPeople(date: string): Promise<BirthdayPerson[]> {
     for (const g of gs) {
       for (const u of [g.pastorId, g.parent?.pastorId, ...g.shepherds.map((s) => s.userId), ...(usersIn.get(g.id) ?? [])]) if (u) recipients.add(u);
     }
-    return { id: p.id, fullName: p.fullName, groupNames: gs.map((g) => g.name), recipientIds: [...recipients], selfUserId: userOf(p) };
+    return { id: p.id, fullName: p.fullName, groupNames: gs.map((g) => g.name), recipientIds: [...recipients], selfUserId: userOfMember.get(p.id) ?? null };
   });
 }
 

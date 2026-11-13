@@ -372,5 +372,5 @@ export class AttendanceController {
   }
 }
 
-@Module({ controllers: [GroupsController, MembersController, AttendanceController], providers: [MembershipService] })
+@Module({ controllers: [GroupsController, MembersController, AttendanceController], providers: [MembershipService], exports: [MembershipService] })
 export class MembershipModule {}

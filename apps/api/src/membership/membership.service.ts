@@ -717,6 +717,13 @@ export class MembershipService {
     return { items: items.map((m) => this.toMemberDto(user, m, seen.get(m.id) ?? null)), nextCursor, total };
   }
 
+  /** Can this user edit this member? (Light check: no attendance history is loaded.) */
+  async canEditMember(user: AuthUser, id: string): Promise<boolean> {
+    if (!this.policy.canViewMembership(user)) return false;
+    const m = await this.prisma.member.findUnique({ where: { id }, include: memberInclude });
+    return !!m && this.policy.canEditMember(user, { createdById: m.createdById, groups: this.memberGroups(m) });
+  }
+
   /** A member's own record (for their "My church" page). */
   async memberForSelf(id: string, user: AuthUser) {
     const m = await this.prisma.member.findUniqueOrThrow({ where: { id }, include: memberInclude });

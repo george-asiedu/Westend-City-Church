@@ -1,15 +1,56 @@
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
-import { BadRequestException, Body, Controller, type PipeTransform, Delete, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  type PipeTransform,
+  Delete,
+  Get,
+  HttpCode,
+  Module,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { AnnouncementAudience, FollowUpStatus, RsvpStatus } from '@wcc/db';
 import { CurrentUser, Meta, Public, ReqMeta, SkipCsrfToken } from '../common/decorators';
 import type { AuthUser } from '../common/auth-user';
 import { InvitationsModule } from '../invitations/invitations.module';
 import { InvitationsService } from '../invitations/invitations.service';
-import { MembershipService } from '../membership/membership.service';
+import { MembershipModule } from '../membership/membership.controller';
 import { AudienceService } from './audience.service';
-import { ChurchService } from './church.service';
+import { FollowUpsService } from './follow-ups.service';
+import { RostersService } from './rosters.service';
+import { ChurchEventsService } from './church-events.service';
+import { MemberRecordsService } from './member-records.service';
+import { AnnouncementsService } from './announcements.service';
+import { VisitorCardsService } from './visitor-cards.service';
+import { MemberImportService } from './member-import.service';
+import { MyChurchService } from './my-church.service';
+import { ChurchAccess } from './shared';
 import { CheckinService, RELATIONS } from './checkin.service';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -80,7 +121,8 @@ class AnnQuery extends PageQuery {
 class UpdateAnnDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(120) title?: string;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(5000) body?: string;
-  @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(500) @Matches(/^https?:\/\//) linkUrl?: string | null;
+  @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(500) @Matches(/^https?:\/\//) linkUrl?:
+    string | null;
   @IsOptional() @IsBoolean() pinned?: boolean;
   @IsOptional() @ValidateIf(nullable) @IsDateString() expiresAt?: string | null;
 }
@@ -115,7 +157,11 @@ class ImportRowDto {
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(20) joinedOn?: string | null;
 }
 class ImportDto {
-  @IsArray() @ArrayMaxSize(2000) @ValidateNested({ each: true }) @Type(() => ImportRowDto) rows!: ImportRowDto[];
+  @IsArray()
+  @ArrayMaxSize(2000)
+  @ValidateNested({ each: true })
+  @Type(() => ImportRowDto)
+  rows!: ImportRowDto[];
   @IsBoolean() dryRun!: boolean;
 }
 class MyMemberDto {
@@ -137,7 +183,12 @@ class CompanionDto {
 class CheckinDto {
   @IsOptional() @IsString() @MaxLength(30) phone?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID('4', { each: true }) householdIds?: string[];
-  @IsOptional() @IsArray() @ArrayMaxSize(15) @ValidateNested({ each: true }) @Type(() => CompanionDto) companions?: CompanionDto[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(15)
+  @ValidateNested({ each: true })
+  @Type(() => CompanionDto)
+  companions?: CompanionDto[];
 }
 const CODE = /^[A-Za-z0-9_-]{10,40}$/;
 class ParseCodePipe implements PipeTransform<string, string> {
@@ -152,93 +203,272 @@ const uuid = new ParseUUIDPipe();
 @Controller()
 export class ChurchController {
   constructor(
-    private readonly svc: ChurchService,
+    private readonly followUpsService: FollowUpsService,
+    private readonly rostersService: RostersService,
+    private readonly churchEventsService: ChurchEventsService,
+    private readonly memberRecordsService: MemberRecordsService,
+    private readonly announcementsService: AnnouncementsService,
+    private readonly visitorCardsService: VisitorCardsService,
+    private readonly memberImportService: MemberImportService,
+    private readonly myChurchService: MyChurchService,
+    private readonly access: ChurchAccess,
     private readonly invites: InvitationsService,
     private readonly checkin: CheckinService,
   ) {}
 
   // self check-in: ushers
-  @Get('attendance/sessions/:id/checkin') checkinStatus(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) { return this.checkin.status(u, id); }
-  @Post('attendance/sessions/:id/checkin') openCheckin(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: OpenCheckinDto, @Meta() m: ReqMeta) { return this.checkin.open(u, id, d.hours ?? 6, m); }
-  @Delete('attendance/sessions/:id/checkin') closeCheckin(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Meta() m: ReqMeta) { return this.checkin.close(u, id, m); }
+  @Get('attendance/sessions/:id/checkin') checkinStatus(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+  ) {
+    return this.checkin.status(u, id);
+  }
+  @Post('attendance/sessions/:id/checkin') openCheckin(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Body() d: OpenCheckinDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.checkin.open(u, id, d.hours ?? 6, m);
+  }
+  @Delete('attendance/sessions/:id/checkin') closeCheckin(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.checkin.close(u, id, m);
+  }
 
   // self check-in: signed-in members
   // No rate limits on check-in: the whole church checks in at once on Sunday, often from the
   // same mobile-network address. The code only works on the day, while the ushers keep it open.
   @SkipThrottle()
-  @Get('checkin/:code') checkinInfo(@CurrentUser() u: AuthUser, @Param('code', codePipe) code: string) { return this.checkin.info(code, u); }
+  @Get('checkin/:code')
+  checkinInfo(@CurrentUser() u: AuthUser, @Param('code', codePipe) code: string) {
+    return this.checkin.info(code, u);
+  }
   @SkipThrottle()
-  @Post('checkin/:code') checkIn(@CurrentUser() u: AuthUser, @Param('code', codePipe) code: string, @Body() d: CheckinDto) { return this.checkin.checkIn(code, u, d); }
+  @Post('checkin/:code')
+  checkIn(@CurrentUser() u: AuthUser, @Param('code', codePipe) code: string, @Body() d: CheckinDto) {
+    return this.checkin.checkIn(code, u, d);
+  }
 
   // self check-in: anyone at the QR code, by phone number
   @Public()
   @SkipThrottle()
-  @Get('public/checkin/:code') publicCheckinInfo(@Param('code', codePipe) code: string) { return this.checkin.info(code, null); }
+  @Get('public/checkin/:code')
+  publicCheckinInfo(@Param('code', codePipe) code: string) {
+    return this.checkin.info(code, null);
+  }
   @Public()
   @SkipCsrfToken() // no session: Origin check only
   @SkipThrottle()
-  @Post('public/checkin/:code') publicCheckIn(@Param('code', codePipe) code: string, @Body() d: CheckinDto) { return this.checkin.checkIn(code, null, d); }
+  @Post('public/checkin/:code')
+  publicCheckIn(@Param('code', codePipe) code: string, @Body() d: CheckinDto) {
+    return this.checkin.checkIn(code, null, d);
+  }
 
   // follow-ups
-  @Get('follow-ups') followUps(@CurrentUser() u: AuthUser, @Query() q: FollowUpQuery) { return this.svc.followUps(u, q); }
-  @Get('follow-ups/assignees') assignees(@CurrentUser() u: AuthUser) { return this.svc.assignees(u); }
-  @Post('follow-ups') createFollowUp(@CurrentUser() u: AuthUser, @Body() d: CreateFollowUpDto, @Meta() m: ReqMeta) { return this.svc.createFollowUp(u, d, m); }
-  @Patch('follow-ups/:id') updateFollowUp(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: UpdateFollowUpDto, @Meta() m: ReqMeta) { return this.svc.updateFollowUp(u, id, d, m); }
+  @Get('follow-ups') followUps(@CurrentUser() u: AuthUser, @Query() q: FollowUpQuery) {
+    return this.followUpsService.followUps(u, q);
+  }
+  @Get('follow-ups/assignees') assignees(@CurrentUser() u: AuthUser) {
+    return this.followUpsService.assignees(u);
+  }
+  @Post('follow-ups') createFollowUp(
+    @CurrentUser() u: AuthUser,
+    @Body() d: CreateFollowUpDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.followUpsService.createFollowUp(u, d, m);
+  }
+  @Patch('follow-ups/:id') updateFollowUp(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Body() d: UpdateFollowUpDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.followUpsService.updateFollowUp(u, id, d, m);
+  }
 
   // rosters
-  @Get('groups/:id/roster') roster(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Query() q: RangeQuery) { return this.svc.roster(u, id, q); }
-  @Post('groups/:id/roster') addRoster(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: RosterDto, @Meta() m: ReqMeta) { return this.svc.addRoster(u, id, d, m); }
-  @Delete('groups/:id/roster/:slotId') @HttpCode(204) removeRoster(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Param('slotId', uuid) slot: string, @Meta() m: ReqMeta) { return this.svc.removeRoster(u, id, slot, m); }
+  @Get('groups/:id/roster') roster(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Query() q: RangeQuery,
+  ) {
+    return this.rostersService.roster(u, id, q);
+  }
+  @Post('groups/:id/roster') addRoster(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Body() d: RosterDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.rostersService.addRoster(u, id, d, m);
+  }
+  @Delete('groups/:id/roster/:slotId') @HttpCode(204) removeRoster(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Param('slotId', uuid) slot: string,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.rostersService.removeRoster(u, id, slot, m);
+  }
 
   // events
-  @Get('church-events') events(@CurrentUser() u: AuthUser, @Query() q: EventQuery) { return this.svc.events(u, q); }
-  @Post('church-events') createEvent(@CurrentUser() u: AuthUser, @Body() d: CreateEventDto, @Meta() m: ReqMeta) { return this.svc.createEvent(u, d, m); }
-  @Patch('church-events/:id') updateEvent(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: UpdateEventDto, @Meta() m: ReqMeta) { return this.svc.updateEvent(u, id, d, m); }
-  @Delete('church-events/:id') @HttpCode(204) deleteEvent(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Meta() m: ReqMeta) { return this.svc.deleteEvent(u, id, m); }
-  @Put('church-events/:id/rsvp') rsvp(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: RsvpDto) { return this.svc.rsvp(u, id, d); }
+  @Get('church-events') events(@CurrentUser() u: AuthUser, @Query() q: EventQuery) {
+    return this.churchEventsService.events(u, q);
+  }
+  @Post('church-events') createEvent(
+    @CurrentUser() u: AuthUser,
+    @Body() d: CreateEventDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.churchEventsService.createEvent(u, d, m);
+  }
+  @Patch('church-events/:id') updateEvent(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Body() d: UpdateEventDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.churchEventsService.updateEvent(u, id, d, m);
+  }
+  @Delete('church-events/:id') @HttpCode(204) deleteEvent(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.churchEventsService.deleteEvent(u, id, m);
+  }
+  @Put('church-events/:id/rsvp') rsvp(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Body() d: RsvpDto,
+  ) {
+    return this.churchEventsService.rsvp(u, id, d);
+  }
 
   // milestones
-  @Get('members/:id/milestones') milestones(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) { return this.svc.milestones(u, id); }
-  @Post('members/:id/milestones') addMilestone(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: MilestoneDto, @Meta() m: ReqMeta) { return this.svc.addMilestone(u, id, d, m); }
-  @Delete('members/:id/milestones/:mid') @HttpCode(204) removeMilestone(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Param('mid', uuid) mid: string, @Meta() m: ReqMeta) { return this.svc.removeMilestone(u, id, mid, m); }
+  @Get('members/:id/milestones') milestones(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) {
+    return this.memberRecordsService.milestones(u, id);
+  }
+  @Post('members/:id/milestones') addMilestone(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Body() d: MilestoneDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.memberRecordsService.addMilestone(u, id, d, m);
+  }
+  @Delete('members/:id/milestones/:mid') @HttpCode(204) removeMilestone(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Param('mid', uuid) mid: string,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.memberRecordsService.removeMilestone(u, id, mid, m);
+  }
 
   // households
-  @Get('members/:id/household') household(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) { return this.svc.household(u, id); }
-  @Put('members/:id/guardian') setGuardian(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: GuardianDto, @Meta() m: ReqMeta) { return this.svc.setGuardian(u, id, d.guardianId ?? null, m); }
+  @Get('members/:id/household') household(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) {
+    return this.memberRecordsService.household(u, id);
+  }
+  @Put('members/:id/guardian') setGuardian(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Body() d: GuardianDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.memberRecordsService.setGuardian(u, id, d.guardianId ?? null, m);
+  }
 
   // member accounts
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('members/:id/invite')
   async invite(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Meta() m: ReqMeta) {
-    await this.svc.memberAccess(u, id, true); // only leaders of this member's groups (or a Super Admin)
+    await this.access.memberAccess(u, id, true); // only leaders of this member's groups (or a Super Admin)
     await this.invites.inviteMember(u, id, m);
     return { ok: true };
   }
-  @Get('me/church') myChurch(@CurrentUser() u: AuthUser) { return this.svc.myChurch(u); }
-  @Patch('me/member') updateMyMember(@CurrentUser() u: AuthUser, @Body() d: MyMemberDto, @Meta() m: ReqMeta) { return this.svc.updateMyMember(u, d, m); }
+  @Get('me/church') myChurch(@CurrentUser() u: AuthUser) {
+    return this.myChurchService.myChurch(u);
+  }
+  @Patch('me/member') updateMyMember(@CurrentUser() u: AuthUser, @Body() d: MyMemberDto, @Meta() m: ReqMeta) {
+    return this.myChurchService.updateMyMember(u, d, m);
+  }
 
   // import
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  @Post('members/import') import(@CurrentUser() u: AuthUser, @Body() d: ImportDto, @Meta() m: ReqMeta) { return this.svc.importMembers(u, d.rows, d.dryRun, m); }
+  @Post('members/import')
+  import(@CurrentUser() u: AuthUser, @Body() d: ImportDto, @Meta() m: ReqMeta) {
+    return this.memberImportService.importMembers(u, d.rows, d.dryRun, m);
+  }
 
   // announcements
-  @Get('announcements') announcements(@CurrentUser() u: AuthUser, @Query() q: AnnQuery) { return this.svc.announcements(u, q); }
-  @Post('announcements') createAnn(@CurrentUser() u: AuthUser, @Body() d: CreateAnnDto, @Meta() m: ReqMeta) { return this.svc.createAnnouncement(u, d, m); }
-  @Patch('announcements/:id') updateAnn(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Body() d: UpdateAnnDto, @Meta() m: ReqMeta) { return this.svc.updateAnnouncement(u, id, d, m); }
-  @Delete('announcements/:id') @HttpCode(204) deleteAnn(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string, @Meta() m: ReqMeta) { return this.svc.deleteAnnouncement(u, id, m); }
-  @Post('announcements/:id/read') @HttpCode(204) read(@CurrentUser() u: AuthUser, @Param('id', uuid) id: string) { return this.svc.markRead(u, id); }
+  @Get('announcements') announcements(@CurrentUser() u: AuthUser, @Query() q: AnnQuery) {
+    return this.announcementsService.announcements(u, q);
+  }
+  @Post('announcements') createAnn(@CurrentUser() u: AuthUser, @Body() d: CreateAnnDto, @Meta() m: ReqMeta) {
+    return this.announcementsService.createAnnouncement(u, d, m);
+  }
+  @Patch('announcements/:id') updateAnn(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Body() d: UpdateAnnDto,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.announcementsService.updateAnnouncement(u, id, d, m);
+  }
+  @Delete('announcements/:id') @HttpCode(204) deleteAnn(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+    @Meta() m: ReqMeta,
+  ) {
+    return this.announcementsService.deleteAnnouncement(u, id, m);
+  }
+  @Post('announcements/:id/read') @HttpCode(204) read(
+    @CurrentUser() u: AuthUser,
+    @Param('id', uuid) id: string,
+  ) {
+    return this.announcementsService.markRead(u, id);
+  }
 
   // visitor cards
-  @Get('visitor-cards') cards(@CurrentUser() u: AuthUser, @Query() q: PageQuery) { return this.svc.visitorCards(u, q); }
-  @Get('visitor-cards/qr') qr(@CurrentUser() u: AuthUser) { return this.svc.visitorCardQr(u); }
+  @Get('visitor-cards') cards(@CurrentUser() u: AuthUser, @Query() q: PageQuery) {
+    return this.visitorCardsService.visitorCards(u, q);
+  }
+  @Get('visitor-cards/qr') qr(@CurrentUser() u: AuthUser) {
+    return this.visitorCardsService.visitorCardQr(u);
+  }
 
   @Public()
   @SkipCsrfToken() // anonymous visitors: Origin check only
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('public/visitor-card')
   @HttpCode(201)
-  visitorCard(@Body() d: VisitorCardDto) { return this.svc.visitorCard(d); }
+  visitorCard(@Body() d: VisitorCardDto) {
+    return this.visitorCardsService.visitorCard(d);
+  }
 }
 
-@Module({ imports: [InvitationsModule], controllers: [ChurchController], providers: [ChurchService, CheckinService, AudienceService, MembershipService], exports: [AudienceService] })
+@Module({
+  imports: [InvitationsModule, MembershipModule],
+  controllers: [ChurchController],
+  providers: [
+    ChurchAccess,
+    FollowUpsService,
+    RostersService,
+    ChurchEventsService,
+    MemberRecordsService,
+    AnnouncementsService,
+    VisitorCardsService,
+    MemberImportService,
+    MyChurchService,
+    CheckinService,
+    AudienceService,
+  ],
+  exports: [AudienceService],
+})
 export class ChurchModule {}
