@@ -9,7 +9,7 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy",
+    "migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
     "seed:prod": "node dist/prisma/seed.js",
     "studio": "dotenv -e ../../.env -- prisma studio"
