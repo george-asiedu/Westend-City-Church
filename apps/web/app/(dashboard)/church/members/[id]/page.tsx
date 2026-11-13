@@ -93,16 +93,20 @@ export default function MemberPage({ params }: { params: Promise<{ id: string }>
               )}
             </Row>
             <Row label="Constituency">{d.constituency && <Link className="text-brand hover:underline" href={`/church/groups/${d.constituency.id}`}>{d.constituency.name}</Link>}</Row>
-            <Row label="Basontas">
-              {d.basontas.length > 0 &&
-                d.basontas.map((b, i) => (
-                  <span key={b.id}>
-                    {i > 0 && ', '}
-                    <Link className="text-brand hover:underline" href={`/church/groups/${b.id}`}>
-                      {b.name}
-                    </Link>
-                  </span>
-                ))}
+            <Row label="Basonta">{d.basonta && <Link className="text-brand hover:underline" href={`/church/groups/${d.basonta.id}`}>{d.basonta.name}</Link>}</Row>
+            <Row label="Bacentas">
+              {d.bacentas.length > 0 && (
+                <span className="space-y-1">
+                  {d.bacentas.map((b) => (
+                    <span key={b.id} className="block">
+                      <Link className="text-brand hover:underline" href={`/church/groups/${b.id}`}>
+                        {b.name}
+                      </Link>
+                      {b.roles.length > 0 && <span className="text-muted"> · {b.roles.map((r) => r.name).join(', ')}</span>}
+                    </span>
+                  ))}
+                </span>
+              )}
             </Row>
             <Row label="Gender">{d.gender}</Row>
             <Row label="Date of birth">{d.dateOfBirth && `${formatDay(d.dateOfBirth)}${age !== null ? ` (${age})` : ''}`}</Row>

@@ -140,3 +140,20 @@ describe('shepherds', () => {
     expect(ROLES.map((r) => p.canViewLeaders(user(r)))).toEqual([true, false, false, false, false]);
   });
 });
+
+describe('group hierarchy', () => {
+  const pa = user('PASTOR');
+  it('who creates what', () => {
+    expect(p.canCreateGroupOfType(pa, 'CONSTITUENCY')).toBe(false);
+    expect(p.canCreateGroupOfType(user('SUPER_ADMIN'), 'CONSTITUENCY')).toBe(true);
+    expect(p.canCreateGroupOfType(pa, 'BASONTA', { pastorId: 'me' })).toBe(true);
+    expect(p.canCreateGroupOfType(pa, 'BASONTA', { pastorId: 'x' })).toBe(false);
+    expect(p.canCreateGroupOfType(pa, 'BACENTA')).toBe(true);
+    expect(p.canCreateGroupOfType(user('SHEPHERD'), 'BACENTA')).toBe(false);
+  });
+  it('head pastor manages and administers basontas under their constituency', () => {
+    const basonta = { pastorId: 'x', createdById: 'x', parentPastorId: 'me' };
+    expect(p.canManageGroup(pa, basonta) && p.canAdministerGroup(pa, basonta)).toBe(true);
+    expect(p.canManageGroup(pa, { ...basonta, parentPastorId: 'y' })).toBe(false);
+  });
+});

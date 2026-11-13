@@ -4,7 +4,7 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRightLeft, ClipboardCheck, Download, MapPin, Pencil, Phone, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, ClipboardCheck, Download, MapPin, Pencil, Phone, Plus, Tags, Trash2, UserMinus, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { GROUP_TYPE_LABELS, type GroupDto, type MemberDto } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
@@ -13,9 +13,10 @@ import { Field, Input, Select } from '@/components/ui/form';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { ChurchTabs, GroupFormDialog, MemberFormDialog, PastorCard } from '@/components/church/church-ui';
 import { GroupStatsPanel } from '@/components/church/group-stats';
+import { AddExistingDialog, BasontasCard, MemberTeamsDialog, TeamsCard } from '@/components/church/group-parts';
 import { api, errorMessage } from '@/lib/api';
 import { useMe } from '@/lib/queries';
-import { downloadCsv, formatDay, mk, sessionName, useGroups, useShepherdCandidates, type MemberPage, type SessionRow } from '@/lib/membership';
+import { bacentaLabel, downloadCsv, formatDay, memberDefaultsFor, mk, sessionName, useGroups, useShepherdCandidates, type MemberPage, type SessionRow } from '@/lib/membership';
 import { cn } from '@/lib/utils';
 
 const isLeaderRole = (r: string) => /shepherd|leader|pastor|overseer/i.test(r);
@@ -65,7 +66,8 @@ function MoveDialog({ member, group, onClose }: { member: MemberDto | null; grou
           ))}
         </Select>
       </Field>
-      {group.type === 'BASONTA' && <p className="mt-3 text-xs text-muted">To add them to another basonta without leaving this one, edit the member instead.</p>}
+      {group.type === 'BACENTA' && <p className="mt-3 text-xs text-muted">Their teams in {group.name} don’t carry over. To serve in another bacenta as well, use “Existing member” there instead.</p>}
+      {group.type === 'BASONTA' && <p className="mt-3 text-xs text-muted">Moving to a basonta in another constituency moves their constituency too.</p>}
     </Dialog>
   );
 }
@@ -136,9 +138,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [moving, setMoving] = useState<MemberDto | null>(null);
   const [q, setQ] = useState('');
   const [leadersOnly, setLeadersOnly] = useState(false);
+  const [team, setTeam] = useState('');
+  const [addingExisting, setAddingExisting] = useState(false);
+  const [addingBasonta, setAddingBasonta] = useState(false);
+  const [teamsFor, setTeamsFor] = useState<MemberDto | null>(null);
   const group = useQuery({ queryKey: mk.group(id), queryFn: () => api<GroupDto & { createdAt: string }>(`/groups/${id}`) });
   const g = group.data;
-  const filter = g ? (g.type === 'CONSTITUENCY' ? { constituencyId: id } : { basontaId: id }) : {};
+  const filter = g ? (g.type === 'CONSTITUENCY' ? { constituencyId: id } : g.type === 'BASONTA' ? { basontaId: id } : { bacentaId: id }) : {};
   const members = useQuery({ queryKey: mk.members({ ...filter, limit: 500 }), queryFn: () => api<MemberPage>('/members', { query: { ...filter, limit: 500 } }), enabled: !!g });
   const sessions = useQuery({ queryKey: mk.sessions({ groupId: id }), queryFn: () => api<SessionRow[]>('/attendance/sessions', { query: { groupId: id } }), enabled: !!g });
 
@@ -148,7 +154,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const term = q.trim().toLowerCase();
   const all = members.data?.items ?? [];
   const leaders = all.filter((m) => isLeaderRole(m.churchRole));
-  const list = all.filter((m) => (!leadersOnly || isLeaderRole(m.churchRole)) && (!term || [m.fullName, m.phone, m.location, m.churchRole].some((v) => v?.toLowerCase().includes(term))));
+  const teamsOf = (m: MemberDto) => m.bacentas.find((b) => b.id === id)?.roles ?? [];
+  const list = all.filter(
+    (m) =>
+      (!leadersOnly || isLeaderRole(m.churchRole)) &&
+      (!team || (team === 'none' ? !teamsOf(m).length : teamsOf(m).some((r) => r.id === team))) &&
+      (!term || [m.fullName, m.phone, m.location, m.churchRole, ...teamsOf(m).map((r) => r.name)].some((v) => v?.toLowerCase().includes(term))),
+  );
 
   return (
     <>
@@ -157,6 +169,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <Badge tone="brand">{GROUP_TYPE_LABELS[g.type]}</Badge>
+            {g.parent && (
+              <span>
+                in{' '}
+                <Link className="text-brand hover:underline" href={`/church/groups/${g.parent.id}`}>
+                  {g.parent.name}
+                </Link>
+              </span>
+            )}
             {!g.isActive && <Badge tone="warning">Inactive</Badge>}
             {g.meetingDay && <span>Meets {g.meetingDay}</span>}
             {g.meetingPlace && (
@@ -205,9 +225,17 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 [&>*]:min-w-0">
           <div className="space-y-4">
             <Card className="space-y-3 p-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Pastor</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{g.type === 'CONSTITUENCY' ? 'Head pastor' : 'Pastor'}</h2>
               <PastorCard pastor={g.pastor} />
+              {g.parent && (
+                <div className="space-y-2 border-t border-border pt-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Head pastor of {g.parent.name}</h3>
+                  <PastorCard pastor={g.parent.pastor} />
+                </div>
+              )}
             </Card>
+            {g.type === 'CONSTITUENCY' && <BasontasCard g={g} onAdd={() => setAddingBasonta(true)} />}
+            {g.type === 'BACENTA' && <TeamsCard g={g} members={all} />}
             <ShepherdsCard g={g} />
             {g.description && (
               <Card className="p-4 text-sm">
@@ -269,21 +297,47 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                 disabled={!all.length}
                 onClick={() =>
                   downloadCsv(`${g.name} members.csv`, [
-                    ['Name', 'Role', 'Phone', 'Where they stay', 'Constituency', 'Basontas', 'Last seen'],
-                    ...all.map((m) => [m.fullName, m.churchRole, m.phone, m.location, m.constituency?.name, m.basontas.map((b) => b.name).join('; '), m.lastSeen]),
+                    ['Name', 'Role', ...(g.type === 'BACENTA' ? ['Teams'] : []), 'Phone', 'Where they stay', 'Constituency', 'Basonta', 'Bacentas', 'Last seen'],
+                    ...all.map((m) => [
+                      m.fullName,
+                      m.churchRole,
+                      ...(g.type === 'BACENTA' ? [teamsOf(m).map((r) => r.name).join('; ')] : []),
+                      m.phone,
+                      m.location,
+                      m.constituency?.name,
+                      m.basonta?.name,
+                      m.bacentas.map(bacentaLabel).join('; '),
+                      m.lastSeen,
+                    ]),
                   ])
                 }
               >
                 <Download className="h-4 w-4" /> CSV
               </Button>
               {g.canManage && (
-                <Button size="sm" onClick={() => setAdding(true)}>
-                  <Plus className="h-4 w-4" /> Add member
-                </Button>
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setAddingExisting(true)}>
+                    <UserPlus className="h-4 w-4" /> Existing member
+                  </Button>
+                  <Button size="sm" onClick={() => setAdding(true)}>
+                    <Plus className="h-4 w-4" /> New member
+                  </Button>
+                </>
               )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Input className="min-w-0 flex-1" placeholder="Search name, phone, area, role…" value={q} onChange={(e) => setQ(e.target.value)} />
+              {g.type === 'BACENTA' && g.roles.length > 0 && (
+                <Select className="w-full sm:w-48" value={team} onChange={(e) => setTeam(e.target.value)} aria-label="Team">
+                  <option value="">All teams</option>
+                  {g.roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.memberCount})
+                    </option>
+                  ))}
+                  <option value="none">No team yet</option>
+                </Select>
+              )}
               <div className="inline-flex shrink-0 rounded-lg border border-border p-0.5 text-sm">
                 <button onClick={() => setLeadersOnly(false)} aria-pressed={!leadersOnly} className={cn('rounded-md px-3 py-1.5', !leadersOnly ? 'bg-surface-2 font-medium' : 'text-muted')}>
                   All
@@ -302,12 +356,23 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     <Link href={`/church/members/${m.id}`} className="min-w-0 flex-1">
                       <p className="flex min-w-0 items-center gap-2">
                         <span className="truncate font-medium hover:text-brand">{m.fullName}</span>
-                        {isLeaderRole(m.churchRole) && <Badge tone="brand">{m.churchRole}</Badge>}
+                        {isLeaderRole(m.churchRole) && <Badge tone="brand" className="shrink-0 whitespace-nowrap">{m.churchRole}</Badge>}
+                        {g.lead?.id === m.id && <Badge tone="success" className="shrink-0 whitespace-nowrap">Team lead</Badge>}
                       </p>
+                      {g.type === 'BACENTA' && teamsOf(m).length > 0 && (
+                        <p className="mt-0.5 flex flex-wrap gap-1">
+                          {teamsOf(m).map((r) => (
+                            <span key={r.id} className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-muted">
+                              {r.name}
+                              {g.roles.find((x) => x.id === r.id)?.lead?.id === m.id ? ' · lead' : ''}
+                            </span>
+                          ))}
+                        </p>
+                      )}
                       <p className="truncate text-xs text-muted">
                         {isLeaderRole(m.churchRole) ? '' : m.churchRole}
                         {m.location ? `${isLeaderRole(m.churchRole) ? '' : ' · '}${m.location}` : ''}
-                        {g.type === 'BASONTA' && m.constituency ? ` · ${m.constituency.name}` : ''}
+                        {g.type === 'BACENTA' && (m.basonta || m.constituency) ? ` · ${m.basonta?.name ?? m.constituency?.name}` : ''}
                       </p>
                     </Link>
                     {m.phone && (
@@ -315,9 +380,34 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         <Phone className="h-4 w-4" /> <span className="hidden sm:inline">{m.phone}</span>
                       </a>
                     )}
+                    {g.canManage && g.type === 'BACENTA' && (
+                      <button className="shrink-0 rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg" aria-label={`Teams for ${m.fullName}`} title="Teams" onClick={() => setTeamsFor(m)}>
+                        <Tags className="h-4 w-4" />
+                      </button>
+                    )}
                     {g.canManage && (
                       <button className="shrink-0 rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg" aria-label={`Move ${m.fullName}`} title="Move to another group" onClick={() => setMoving(m)}>
                         <ArrowRightLeft className="h-4 w-4" />
+                      </button>
+                    )}
+                    {g.canManage && g.type === 'BACENTA' && (
+                      <button
+                        className="shrink-0 rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"
+                        aria-label={`Remove ${m.fullName} from ${g.name}`}
+                        title={`Remove from ${g.name}`}
+                        onClick={async () => {
+                          if (!window.confirm(`Remove ${m.fullName} from ${g.name}? They stay a church member.`)) return;
+                          try {
+                            await api(`/groups/${id}/members/${m.id}`, { method: 'DELETE' });
+                            toast.success(`${m.fullName} removed from ${g.name}`);
+                            void qc.invalidateQueries({ queryKey: ['members'] });
+                            void qc.invalidateQueries({ queryKey: mk.group(id) });
+                          } catch (e) {
+                            toast.error(errorMessage(e));
+                          }
+                        }}
+                      >
+                        <UserMinus className="h-4 w-4" />
                       </button>
                     )}
                   </li>
@@ -331,8 +421,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       <GroupFormDialog open={editing} onOpenChange={setEditing} group={g} />
-      <MemberFormDialog open={adding} onOpenChange={setAdding} defaults={g.type === 'CONSTITUENCY' ? { constituencyId: g.id } : { basontaIds: [g.id] }} />
+      <MemberFormDialog open={adding} onOpenChange={setAdding} defaults={memberDefaultsFor(g)} />
       <MoveDialog member={moving} group={g} onClose={() => setMoving(null)} />
+      <AddExistingDialog g={g} open={addingExisting} onClose={() => setAddingExisting(false)} />
+      <MemberTeamsDialog g={g} member={teamsFor} onClose={() => setTeamsFor(null)} />
+      <GroupFormDialog open={addingBasonta} onOpenChange={setAddingBasonta} defaultType="BASONTA" defaultParentId={g.id} />
     </>
   );
 }

@@ -13,7 +13,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/form';
 import { Badge, Card, ConfirmButton, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
 import { MemberFormDialog } from '@/components/church/church-ui';
 import { api, errorMessage } from '@/lib/api';
-import { formatDay, localDate, mk, sessionName } from '@/lib/membership';
+import { formatDay, localDate, memberDefaultsFor, mk, sessionName } from '@/lib/membership';
 import { cn } from '@/lib/utils';
 
 type GuestDraft = { fullName: string; phone: string; intent: 'VISIT' | 'JOINING' };
@@ -140,6 +140,7 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
   const [meta, setMeta] = useState({ visitors: '0', firstTimers: '0', notes: '', serviceType: '', title: '', date: '' });
   const [q, setQ] = useState('');
   const [con, setCon] = useState('');
+  const [teamFilter, setTeamFilter] = useState('');
   const [adding, setAdding] = useState(false);
   const [broughtFor, setBroughtFor] = useState<{ id: string; fullName: string } | null>(null);
   const [convert, setConvert] = useState<GuestDto | null>(null);
@@ -210,7 +211,13 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
   if (!s) return <EmptyState title="Couldn’t open this attendance sheet">{sheet.error ? errorMessage(sheet.error) : null}</EmptyState>;
   const term = q.trim().toLowerCase();
   const constituencies = [...new Map(s.roster.filter((m) => m.constituencyId).map((m) => [m.constituencyId!, m.constituency!])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  const shown = s.roster.filter((m) => (!con || (con === 'none' ? !m.constituencyId : m.constituencyId === con)) && (!term || m.fullName.toLowerCase().includes(term) || m.churchRole.toLowerCase().includes(term)));
+  const teams = [...new Map(s.roster.flatMap((m) => m.teamRoles).map((r) => [r.id, r.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const shown = s.roster.filter(
+    (m) =>
+      (!con || (con === 'none' ? !m.constituencyId : m.constituencyId === con)) &&
+      (!teamFilter || m.teamRoles.some((r) => r.id === teamFilter)) &&
+      (!term || m.fullName.toLowerCase().includes(term) || m.churchRole.toLowerCase().includes(term) || m.teamRoles.some((r) => r.name.toLowerCase().includes(term))),
+  );
   const presentCount = s.roster.filter((m) => isPresent(m.id)).length;
   const toggle = (mid: string) => s.canEdit && setChanges((c) => new Map(c).set(mid, !isPresent(mid)));
   const markShown = (on: boolean) =>
@@ -277,6 +284,16 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <Input className="pl-9" placeholder="Find a member…" value={q} onChange={(e) => setQ(e.target.value)} />
             </label>
+            {teams.length > 0 && (
+              <Select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} aria-label="Team">
+                <option value="">All teams</option>
+                {teams.map(([tid, name]) => (
+                  <option key={tid} value={tid}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            )}
             {!s.session.group && constituencies.length > 0 && (
               <Select value={con} onChange={(e) => setCon(e.target.value)} aria-label="Constituency">
                 <option value="">All constituencies</option>
@@ -331,8 +348,8 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{m.fullName}</span>
                       <span className="block truncate text-xs text-muted">
-                        {m.churchRole}
-                        {!s.session.group || s.session.group.type === 'BASONTA' ? ` · ${m.constituency ?? 'No constituency'}` : ''}
+                        {m.teamRoles.length ? m.teamRoles.map((r) => r.name).join(', ') : m.churchRole}
+                        {!s.session.group || s.session.group.type === 'BACENTA' ? ` · ${m.constituency ?? 'No constituency'}` : ''}
                       </span>
                     </span>
                   </button>
@@ -455,7 +472,7 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
       <MemberFormDialog
         open={adding}
         onOpenChange={setAdding}
-        defaults={s.session.group ? (s.session.group.type === 'CONSTITUENCY' ? { constituencyId: s.session.group.id } : { basontaIds: [s.session.group.id] }) : undefined}
+        defaults={memberDefaultsFor(s.session.group)}
         onSaved={async (m) => {
           const fresh = await api<AttendanceSheetDto>(`/attendance/sessions/${id}`);
           qc.setQueryData(key, fresh);
@@ -472,7 +489,7 @@ export default function SessionSheetPage({ params }: { params: Promise<{ id: str
                 phone: convert.phone ?? '',
                 fromGuestId: convert.id,
                 title: 'Make a member',
-                ...(s.session.group ? (s.session.group.type === 'CONSTITUENCY' ? { constituencyId: s.session.group.id } : { basontaIds: [s.session.group.id] }) : {}),
+                ...memberDefaultsFor(s.session.group),
               }
             : undefined
         }

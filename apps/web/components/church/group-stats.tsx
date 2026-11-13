@@ -82,8 +82,14 @@ export function GroupStatsPanel({ groupId, groupName }: { groupId: string; group
               />
             </Card>
           </div>
+          {s.teamRoles.length > 0 && (
+            <Card className="p-4">
+              <h3 className="mb-3 text-sm font-semibold">Members per team</h3>
+              <RankedBars rows={s.teamRoles.map((r) => ({ key: r.id ?? 'none', label: r.name, value: r.count }))} unit="members" max={12} />
+            </Card>
+          )}
           <Card className="p-4">
-            <h3 className="mb-3 text-sm font-semibold">Roles in this group</h3>
+            <h3 className="mb-3 text-sm font-semibold">Roles in church</h3>
             <RankedBars rows={s.roles.map((r) => ({ key: r.role, label: r.role, value: r.count }))} empty="No members yet." />
           </Card>
         </>

@@ -11,12 +11,14 @@ import { Badge, Card, EmptyState, PageHeader, PageLoader } from '@/components/ui
 import { ChurchTabs, MemberFormDialog } from '@/components/church/church-ui';
 import { api, errorMessage } from '@/lib/api';
 import { useMe } from '@/lib/queries';
-import { canAddMembers, downloadCsv, formatDay, mk, useGroups, type MemberPage } from '@/lib/membership';
+import { bacentaLabel, canAddMembers, downloadCsv, formatDay, mk, useGroups, type MemberPage } from '@/lib/membership';
 
 export default function MembersPage() {
   const me = useMe();
   const constituencies = useGroups('CONSTITUENCY');
   const basontas = useGroups('BASONTA');
+  const bacentas = useGroups('BACENTA');
+  const [bacentaId, setBacentaId] = useState('');
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [constituencyId, setConstituencyId] = useState('');
@@ -29,7 +31,7 @@ export default function MembersPage() {
     const t = setTimeout(() => (setDebounced(q.trim()), setPage(1)), 300);
     return () => clearTimeout(t);
   }, [q]);
-  const params = { q: debounced, constituencyId, basontaId, status, page, limit: 50 };
+  const params = { q: debounced, constituencyId, basontaId, bacentaId, status, page, limit: 50 };
   const members = useQuery({ queryKey: mk.members(params), queryFn: () => api<MemberPage>('/members', { query: params }), placeholderData: keepPreviousData });
   const p = me.data?.permissions;
   if (me.isLoading) return <PageLoader />;
@@ -42,7 +44,7 @@ export default function MembersPage() {
     try {
       const all = await api<MemberPage>('/members', { query: { ...params, page: 1, limit: 500 } });
       downloadCsv('members.csv', [
-        ['Name', 'Role', 'Phone', 'Email', 'Gender', 'Where they stay', 'Constituency', 'Basontas', 'Date of birth', 'Joined', 'Active', 'Last seen'],
+        ['Name', 'Role', 'Phone', 'Email', 'Gender', 'Where they stay', 'Constituency', 'Basonta', 'Bacentas (teams)', 'Date of birth', 'Joined', 'Active', 'Last seen'],
         ...all.items.map((m) => [
           m.fullName,
           m.churchRole,
@@ -51,7 +53,8 @@ export default function MembersPage() {
           m.gender,
           m.location,
           m.constituency?.name,
-          m.basontas.map((b) => b.name).join('; '),
+          m.basonta?.name,
+          m.bacentas.map(bacentaLabel).join('; '),
           m.dateOfBirth,
           m.joinedOn,
           m.isActive ? 'Yes' : 'No',
@@ -85,7 +88,7 @@ export default function MembersPage() {
         }
       />
       <ChurchTabs />
-      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 [&>*]:min-w-0">
+      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5 [&>*]:min-w-0">
         <Input placeholder="Search name, phone, area, role…" value={q} onChange={(e) => setQ(e.target.value)} />
         <Select value={constituencyId} onChange={(e) => (setConstituencyId(e.target.value), setPage(1))} aria-label="Constituency">
           <option value="">All constituencies</option>
@@ -98,7 +101,17 @@ export default function MembersPage() {
         </Select>
         <Select value={basontaId} onChange={(e) => (setBasontaId(e.target.value), setPage(1))} aria-label="Basonta">
           <option value="">All basontas</option>
+          <option value="none">No basonta</option>
           {basontas.data?.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+              {b.parent ? ` (${b.parent.name})` : ''}
+            </option>
+          ))}
+        </Select>
+        <Select value={bacentaId} onChange={(e) => (setBacentaId(e.target.value), setPage(1))} aria-label="Bacenta">
+          <option value="">All bacentas</option>
+          {bacentas.data?.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
             </option>
@@ -128,7 +141,8 @@ export default function MembersPage() {
                   <th className="px-4 py-2 font-medium">Phone</th>
                   <th className="px-4 py-2 font-medium">Where they stay</th>
                   <th className="px-4 py-2 font-medium">Constituency</th>
-                  <th className="px-4 py-2 font-medium">Basontas</th>
+                  <th className="px-4 py-2 font-medium">Basonta</th>
+                  <th className="px-4 py-2 font-medium">Bacentas</th>
                   <th className="px-4 py-2 font-medium">Last seen</th>
                 </tr>
               </thead>
@@ -145,7 +159,8 @@ export default function MembersPage() {
                     <td className="whitespace-nowrap px-4 py-2.5">{m.phone ? <a href={`tel:${m.phone}`} className="text-brand hover:underline">{m.phone}</a> : '—'}</td>
                     <td className="px-4 py-2.5">{m.location ?? '—'}</td>
                     <td className="px-4 py-2.5">{m.constituency?.name ?? '—'}</td>
-                    <td className="px-4 py-2.5">{m.basontas.map((b) => b.name).join(', ') || '—'}</td>
+                    <td className="px-4 py-2.5">{m.basonta?.name ?? '—'}</td>
+                    <td className="px-4 py-2.5">{m.bacentas.map(bacentaLabel).join(', ') || '—'}</td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-muted">{m.lastSeen ? formatDay(m.lastSeen) : 'Never'}</td>
                   </tr>
                 ))}
@@ -160,7 +175,7 @@ export default function MembersPage() {
                     {m.fullName} {!m.isActive && <Badge tone="warning">Inactive</Badge>}
                   </p>
                   <p className="truncate text-xs text-muted">
-                    {[m.churchRole, m.constituency?.name, m.location].filter(Boolean).join(' · ')}
+                    {[m.churchRole, m.basonta?.name ?? m.constituency?.name, m.bacentas.map((b) => b.name).join(', '), m.location].filter(Boolean).join(' · ')}
                   </p>
                 </Link>
                 {m.phone && (
@@ -186,7 +201,7 @@ export default function MembersPage() {
           )}
         </Card>
       ) : (
-        <EmptyState icon={<Users className="h-8 w-8" />} title={debounced || constituencyId || basontaId ? 'No members match' : 'No members yet'}>
+        <EmptyState icon={<Users className="h-8 w-8" />} title={debounced || constituencyId || basontaId || bacentaId ? 'No members match' : 'No members yet'}>
           {canAddMembers(me.data!) && !debounced ? 'Add members here, or from a constituency or basonta page.' : null}
         </EmptyState>
       )}

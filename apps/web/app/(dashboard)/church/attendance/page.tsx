@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ClipboardCheck, Download, Phone, UserPlus, UserX } from 'lucide-react';
-import type { GuestDto, MeResponse } from '@wcc/shared';
+import { GROUP_TYPE_LABELS, type GuestDto, type MeResponse } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form';
 import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
@@ -45,7 +45,7 @@ function ChurchStats() {
       ...s.services.map((x) => [x.date, x.serviceType, x.title, x.present, x.visitors, x.firstTimers, x.guests, ...cons.map((c) => x.byConstituency[c.id] ?? 0), x.byConstituency.none ?? 0]),
       [],
       ['Group', 'Type', 'Pastor', 'Members', 'Meetings', 'Average present', 'Last meeting'],
-      ...s.groups.map((g) => [g.name, g.type === 'CONSTITUENCY' ? 'Constituency' : 'Basonta', g.pastor, g.members, g.meetings, g.averagePresent, g.lastMeeting]),
+      ...s.groups.map((g) => [g.name, GROUP_TYPE_LABELS[g.type], g.pastor, g.members, g.meetings, g.averagePresent, g.lastMeeting]),
       [],
       ['Not seen in this period', 'Phone', 'Constituency', 'Last seen'],
       ...s.absentees.map((a) => [a.fullName, a.phone, a.constituency, a.lastSeen]),
@@ -150,10 +150,16 @@ function ChurchStats() {
             </Card>
           </div>
 
-          <Card className="p-4">
-            <h2 className="mb-3 font-semibold">Members per basonta</h2>
-            <RankedBars rows={s.basontas.map((b) => ({ key: b.id, label: b.name, value: b.members }))} unit="members" empty="No basontas yet." />
-          </Card>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+            <Card className="p-4">
+              <h2 className="mb-3 font-semibold">Members per basonta</h2>
+              <RankedBars rows={s.basontas.map((b) => ({ key: b.id, label: b.name, value: b.members }))} unit="members" empty="No basontas yet." />
+            </Card>
+            <Card className="p-4">
+              <h2 className="mb-3 font-semibold">Members per bacenta</h2>
+              <RankedBars rows={s.bacentas.map((b) => ({ key: b.id, label: b.name, value: b.members }))} unit="members" empty="No bacentas yet." />
+            </Card>
+          </div>
 
           <Card className="p-4">
             <h2 className="mb-3 font-semibold">Services</h2>
@@ -226,7 +232,7 @@ function ChurchStats() {
                           <Link href={`/church/groups/${g.id}`} className="font-medium hover:text-brand">
                             {g.name}
                           </Link>
-                          <span className="ml-2 text-xs text-muted">{g.type === 'CONSTITUENCY' ? 'Constituency' : 'Basonta'}</span>
+                          <span className="ml-2 text-xs text-muted">{GROUP_TYPE_LABELS[g.type]}</span>
                         </td>
                         <td className="py-2 pr-4">{g.pastor ?? '—'}</td>
                         <td className="py-2 pr-4 text-right">{g.members}</td>

@@ -8,6 +8,7 @@ import { Mail, Phone, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   CHURCH_ROLE_SUGGESTIONS,
+  GROUP_TYPE_HELP,
   GROUP_TYPE_LABELS,
   ROLE_LABELS,
   ROLE_PERMISSION_LABELS,
@@ -86,35 +87,52 @@ export function PastorCard({ pastor, className }: { pastor: PastorDto | null; cl
 
 // ---------------------------------------------------------------- group form
 
+type GType = 'CONSTITUENCY' | 'BASONTA' | 'BACENTA';
+
+/** Which kinds of group this user may create, and under which constituencies (for basontas). */
+export function useCreatableTypes() {
+  const me = useMe();
+  const constituencies = useGroups('CONSTITUENCY');
+  const p = me.data?.permissions;
+  const admin = !!p?.canManageMembership;
+  const pastor = me.data?.role === 'PASTOR';
+  const ledConstituencies = (constituencies.data ?? []).filter((c) => admin || c.pastor?.id === me.data?.id);
+  const types: GType[] = [...(admin ? (['CONSTITUENCY'] as const) : []), ...(ledConstituencies.length ? (['BASONTA'] as const) : []), ...(admin || pastor ? (['BACENTA'] as const) : [])];
+  return { types, ledConstituencies, admin };
+}
+
 export function GroupFormDialog({
   open,
   onOpenChange,
   group,
   defaultType = 'CONSTITUENCY',
+  defaultParentId,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   group?: GroupDto | null;
-  defaultType?: 'CONSTITUENCY' | 'BASONTA';
+  defaultType?: GType;
+  defaultParentId?: string;
   onSaved?: (g: GroupDto) => void;
 }) {
-  const me = useMe();
   const qc = useQueryClient();
-  const isAdmin = !!me.data?.permissions.canManageMembership;
-  const pastors = usePastors(open && isAdmin);
-  const [f, setF] = useState({ type: defaultType, name: '', description: '', meetingDay: '', meetingPlace: '', pastorId: '' });
+  const { types, ledConstituencies, admin } = useCreatableTypes();
+  const pastors = usePastors(open && admin);
+  const [f, setF] = useState({ type: defaultType as GType, name: '', description: '', meetingDay: '', meetingPlace: '', pastorId: '', parentId: '' });
   useEffect(() => {
     if (!open) return;
+    const type = group?.type ?? (types.includes(defaultType) ? defaultType : (types[0] ?? defaultType));
     setF({
-      type: group?.type ?? defaultType,
+      type,
       name: group?.name ?? '',
       description: group?.description ?? '',
       meetingDay: group?.meetingDay ?? '',
       meetingPlace: group?.meetingPlace ?? '',
       pastorId: group?.pastor?.id ?? '',
+      parentId: group?.parent?.id ?? defaultParentId ?? ledConstituencies[0]?.id ?? '',
     });
-  }, [open, group, defaultType]);
+  }, [open, group, defaultType]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF((s) => ({ ...s, [k]: e.target.value }));
   const save = useMutation({
     mutationFn: () => {
@@ -123,19 +141,21 @@ export function GroupFormDialog({
         description: f.description || null,
         meetingDay: f.meetingDay || null,
         meetingPlace: f.meetingPlace || null,
-        ...(isAdmin ? { pastorId: f.pastorId || null } : {}),
+        ...(admin ? { pastorId: f.pastorId || null } : {}),
+        ...(f.type === 'BASONTA' && f.parentId ? { parentId: f.parentId } : {}),
       };
       return group ? api<GroupDto>(`/groups/${group.id}`, { method: 'PATCH', body }) : api<GroupDto>('/groups', { method: 'POST', body: { ...body, type: f.type } });
     },
     onSuccess: (g) => {
       toast.success(group ? `${g.name} saved` : `${GROUP_TYPE_LABELS[g.type]} “${g.name}” created`);
       void qc.invalidateQueries({ queryKey: ['groups'] });
-      void qc.invalidateQueries({ queryKey: mk.group(g.id) });
+      void qc.invalidateQueries({ queryKey: ['group'] });
       onOpenChange(false);
       onSaved?.(g);
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const pastorLabel = f.type === 'CONSTITUENCY' ? 'Head pastor' : 'Pastor';
   return (
     <Dialog
       open={open}
@@ -146,7 +166,7 @@ export function GroupFormDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button loading={save.isPending} disabled={f.name.trim().length < 2} onClick={() => save.mutate()}>
+          <Button loading={save.isPending} disabled={f.name.trim().length < 2 || (f.type === 'BASONTA' && !f.parentId)} onClick={() => save.mutate()}>
             {group ? 'Save' : 'Create'}
           </Button>
         </>
@@ -160,20 +180,40 @@ export function GroupFormDialog({
         }}
       >
         {!group && (
-          <Field label="Type" htmlFor="g-type" hint="Constituency: where members belong. Basonta: a ministry members serve in (choir, ushers…).">
+          <Field label="Kind of group" htmlFor="g-type" hint={GROUP_TYPE_HELP[f.type]}>
             <Select id="g-type" value={f.type} onChange={set('type')}>
-              <option value="CONSTITUENCY">Constituency</option>
-              <option value="BASONTA">Basonta</option>
+              {types.map((t) => (
+                <option key={t} value={t}>
+                  {GROUP_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        {f.type === 'BASONTA' && (
+          <Field label="Under constituency" htmlFor="g-parent">
+            <Select id="g-parent" value={f.parentId} onChange={set('parentId')}>
+              {!f.parentId && <option value="">Choose…</option>}
+              {(group?.parent && !ledConstituencies.some((c) => c.id === group.parent!.id) ? [{ id: group.parent.id, name: group.parent.name }] : []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+              {ledConstituencies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </Select>
           </Field>
         )}
         <Field label="Name" htmlFor="g-name">
-          <Input id="g-name" required minLength={2} maxLength={80} value={f.name} onChange={set('name')} autoFocus />
+          <Input id="g-name" required minLength={2} maxLength={80} value={f.name} onChange={set('name')} autoFocus placeholder={f.type === 'BACENTA' ? 'e.g. Media, Choir, Ushers' : undefined} />
         </Field>
-        {isAdmin ? (
-          <Field label="Pastor" htmlFor="g-pastor" hint="Pastors and Super Admins can lead groups. Pastors can only take attendance for groups they lead.">
+        {admin ? (
+          <Field label={pastorLabel} htmlFor="g-pastor" hint="Pastors and Super Admins can lead groups.">
             <Select id="g-pastor" value={f.pastorId} onChange={set('pastorId')}>
-              <option value="">No pastor yet</option>
+              <option value="">No {pastorLabel.toLowerCase()} yet</option>
               {pastors.data?.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.fullName}
@@ -182,7 +222,7 @@ export function GroupFormDialog({
             </Select>
           </Field>
         ) : (
-          !group && <p className="text-sm text-muted">You will be this group’s pastor.</p>
+          !group && <p className="text-sm text-muted">{f.type === 'BASONTA' ? 'As head pastor of the constituency you can manage this basonta. A Super Admin can assign it its own pastor.' : 'You will lead this group.'}</p>
         )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Meeting day" htmlFor="g-day">
@@ -212,7 +252,9 @@ const emptyMember = {
   location: '',
   churchRole: 'Member',
   constituencyId: '',
-  basontaIds: [] as string[],
+  basontaId: '',
+  /** bacenta id → team role ids */
+  bacentas: {} as Record<string, string[]>,
   joinedOn: '',
   notes: '',
   isActive: true,
@@ -228,55 +270,64 @@ export function MemberFormDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   member?: MemberDto | null;
-  defaults?: { constituencyId?: string; basontaIds?: string[]; fullName?: string; phone?: string; fromGuestId?: string; title?: string };
+  defaults?: { constituencyId?: string; basontaId?: string; bacentaIds?: string[]; fullName?: string; phone?: string; fromGuestId?: string; title?: string };
   onSaved?: (m: MemberDetail) => void;
 }) {
   const qc = useQueryClient();
   const constituencies = useGroups('CONSTITUENCY');
   const basontas = useGroups('BASONTA');
+  const bacentas = useGroups('BACENTA');
   const [f, setF] = useState(emptyMember);
   useEffect(() => {
     if (!open) return;
-    setF(
-      member
-        ? {
-            fullName: member.fullName,
-            phone: member.phone ?? '',
-            email: member.email ?? '',
-            gender: member.gender ?? '',
-            dateOfBirth: member.dateOfBirth ?? '',
-            location: member.location ?? '',
-            churchRole: member.churchRole,
-            constituencyId: member.constituency?.id ?? '',
-            basontaIds: member.basontas.map((b) => b.id),
-            joinedOn: member.joinedOn ?? '',
-            notes: member.notes ?? '',
-            isActive: member.isActive,
-          }
-        : {
-            ...emptyMember,
-            fullName: defaults?.fullName ?? '',
-            phone: defaults?.phone ?? '',
-            churchRole: defaults?.fromGuestId ? 'New convert' : 'Member',
-            constituencyId: defaults?.constituencyId ?? '',
-            basontaIds: defaults?.basontaIds ?? [],
-          },
-    );
-  }, [open, member, defaults]);
+    if (member) {
+      setF({
+        fullName: member.fullName,
+        phone: member.phone ?? '',
+        email: member.email ?? '',
+        gender: member.gender ?? '',
+        dateOfBirth: member.dateOfBirth ?? '',
+        location: member.location ?? '',
+        churchRole: member.churchRole,
+        constituencyId: member.constituency?.id ?? '',
+        basontaId: member.basonta?.id ?? '',
+        bacentas: Object.fromEntries(member.bacentas.map((b) => [b.id, b.roles.map((r) => r.id)])),
+        joinedOn: member.joinedOn ?? '',
+        notes: member.notes ?? '',
+        isActive: member.isActive,
+      });
+    } else {
+      const basonta = defaults?.basontaId ? basontas.data?.find((b) => b.id === defaults.basontaId) : undefined;
+      setF({
+        ...emptyMember,
+        fullName: defaults?.fullName ?? '',
+        phone: defaults?.phone ?? '',
+        churchRole: defaults?.fromGuestId ? 'New convert' : 'Member',
+        constituencyId: defaults?.constituencyId ?? basonta?.parent?.id ?? '',
+        basontaId: defaults?.basontaId ?? '',
+        bacentas: Object.fromEntries((defaults?.bacentaIds ?? []).map((id) => [id, []])),
+      });
+    }
+  }, [open, member, defaults]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF((s) => ({ ...s, [k]: e.target.value }));
+  // Basontas belong to a constituency: only offer the ones under the chosen constituency.
+  const basontaOptions = (basontas.data ?? []).filter((b) => !f.constituencyId || b.parent?.id === f.constituencyId);
   const save = useMutation({
     mutationFn: () => {
       const body = {
-        ...f,
         fullName: f.fullName.trim(),
         phone: f.phone || null,
         email: f.email || null,
         gender: f.gender || null,
         dateOfBirth: f.dateOfBirth || null,
         location: f.location || null,
+        churchRole: f.churchRole,
         constituencyId: f.constituencyId || null,
+        basontaId: f.basontaId || null,
+        bacentas: Object.entries(f.bacentas).map(([groupId, roleIds]) => ({ groupId, roleIds })),
         joinedOn: f.joinedOn || null,
         notes: f.notes || null,
+        isActive: f.isActive,
       };
       return member
         ? api<MemberDetail>(`/members/${member.id}`, { method: 'PATCH', body })
@@ -287,13 +338,25 @@ export function MemberFormDialog({
       void qc.invalidateQueries({ queryKey: ['members'] });
       void qc.invalidateQueries({ queryKey: mk.member(m.id) });
       void qc.invalidateQueries({ queryKey: ['groups'] });
+      void qc.invalidateQueries({ queryKey: ['group'] });
       void qc.invalidateQueries({ queryKey: ['attendance'] });
       onOpenChange(false);
       onSaved?.(m);
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const toggleBasonta = (id: string, on: boolean) => setF((s) => ({ ...s, basontaIds: on ? [...s.basontaIds, id] : s.basontaIds.filter((x) => x !== id) }));
+  const toggleBacenta = (id: string, on: boolean) =>
+    setF((s) => {
+      const b = { ...s.bacentas };
+      if (on) b[id] = b[id] ?? [];
+      else delete b[id];
+      return { ...s, bacentas: b };
+    });
+  const toggleRole = (bid: string, rid: string) =>
+    setF((s) => {
+      const cur = s.bacentas[bid] ?? [];
+      return { ...s, bacentas: { ...s.bacentas, [bid]: cur.includes(rid) ? cur.filter((x) => x !== rid) : [...cur, rid] } };
+    });
   return (
     <Dialog
       open={open}
@@ -336,7 +399,14 @@ export function MemberFormDialog({
           <Input id="m-loc" maxLength={160} placeholder="Area / landmark" value={f.location} onChange={set('location')} />
         </Field>
         <Field label="Constituency" htmlFor="m-con">
-          <Select id="m-con" value={f.constituencyId} onChange={set('constituencyId')}>
+          <Select
+            id="m-con"
+            value={f.constituencyId}
+            onChange={(e) => {
+              const c = e.target.value;
+              setF((s) => ({ ...s, constituencyId: c, basontaId: basontas.data?.find((b) => b.id === s.basontaId)?.parent?.id === c ? s.basontaId : '' }));
+            }}
+          >
             <option value="">Not assigned</option>
             {constituencies.data?.map((c) => (
               <option key={c.id} value={c.id}>
@@ -345,6 +415,59 @@ export function MemberFormDialog({
             ))}
           </Select>
         </Field>
+        <Field label="Basonta" htmlFor="m-bas" hint={f.constituencyId && !basontaOptions.length ? 'This constituency has no basontas yet.' : undefined}>
+          <Select
+            id="m-bas"
+            value={f.basontaId}
+            onChange={(e) => {
+              const id = e.target.value;
+              const parent = basontas.data?.find((b) => b.id === id)?.parent?.id;
+              setF((s) => ({ ...s, basontaId: id, constituencyId: parent ?? s.constituencyId }));
+            }}
+          >
+            <option value="">Not assigned</option>
+            {basontaOptions.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+                {!f.constituencyId && b.parent ? ` (${b.parent.name})` : ''}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {!!bacentas.data?.length && (
+          <fieldset className="space-y-2 sm:col-span-2">
+            <legend className="mb-1.5 text-sm font-medium">Bacentas (ministries) and their teams</legend>
+            <div className="space-y-2">
+              {bacentas.data.map((b) => {
+                const on = f.bacentas[b.id] !== undefined;
+                return (
+                  <div key={b.id} className={cn('rounded-lg border p-2.5', on ? 'border-brand/40 bg-brand/5' : 'border-border')}>
+                    <Checkbox label={<span className="font-medium">{b.name}</span>} checked={on} onChange={(e) => toggleBacenta(b.id, e.target.checked)} />
+                    {on && b.roles.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5 pl-6" role="group" aria-label={`${b.name} teams`}>
+                        {b.roles.map((r) => {
+                          const sel = f.bacentas[b.id]!.includes(r.id);
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              aria-pressed={sel}
+                              onClick={() => toggleRole(b.id, r.id)}
+                              className={cn('rounded-full border px-2.5 py-1 text-xs', sel ? 'border-brand bg-brand text-white' : 'border-border text-muted hover:text-fg')}
+                            >
+                              {r.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {on && !b.roles.length && <p className="mt-1 pl-6 text-xs text-muted">No teams set up in {b.name} yet.</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </fieldset>
+        )}
         <Field label="Gender" htmlFor="m-gender">
           <Select id="m-gender" value={f.gender} onChange={set('gender')}>
             <option value="">—</option>
@@ -355,7 +478,7 @@ export function MemberFormDialog({
         <Field label="Email" htmlFor="m-email">
           <Input id="m-email" type="email" maxLength={254} autoComplete="off" value={f.email} onChange={set('email')} />
         </Field>
-        <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
+        <div className="grid grid-cols-2 gap-3 sm:col-span-2 [&>*]:min-w-0">
           <Field label="Date of birth" htmlFor="m-dob">
             <Input id="m-dob" type="date" value={f.dateOfBirth} onChange={set('dateOfBirth')} />
           </Field>
@@ -363,16 +486,6 @@ export function MemberFormDialog({
             <Input id="m-joined" type="date" value={f.joinedOn} onChange={set('joinedOn')} />
           </Field>
         </div>
-        {!!basontas.data?.length && (
-          <fieldset className="space-y-2 sm:col-span-2">
-            <legend className="mb-1.5 text-sm font-medium">Basontas</legend>
-            <div className="flex flex-wrap gap-x-5 gap-y-2">
-              {basontas.data.map((b) => (
-                <Checkbox key={b.id} label={b.name} checked={f.basontaIds.includes(b.id)} onChange={(e) => toggleBasonta(b.id, e.target.checked)} />
-              ))}
-            </div>
-          </fieldset>
-        )}
         <div className="sm:col-span-2">
           <Field label="Notes" htmlFor="m-notes">
             <Textarea id="m-notes" maxLength={1000} value={f.notes} onChange={set('notes')} className="min-h-16" />

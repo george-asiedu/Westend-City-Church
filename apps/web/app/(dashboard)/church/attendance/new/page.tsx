@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { MEETING_TYPE_SUGGESTIONS, SERVICE_TYPE_SUGGESTIONS } from '@wcc/shared';
+import { GROUP_TYPE_LABELS, MEETING_TYPE_SUGGESTIONS, SERVICE_TYPE_SUGGESTIONS } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/form';
 import { Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
@@ -72,7 +72,7 @@ function NewSession() {
               {canChurch && <option value="">The whole church</option>}
               {mine.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {g.name} ({g.type === 'CONSTITUENCY' ? 'constituency' : 'basonta'})
+                  {g.name} ({GROUP_TYPE_LABELS[g.type].toLowerCase()})
                 </option>
               ))}
             </Select>

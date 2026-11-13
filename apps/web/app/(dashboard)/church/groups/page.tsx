@@ -3,10 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { CalendarDays, Plus, Users } from 'lucide-react';
-import { GROUP_TYPE_LABELS, type GroupDto } from '@wcc/shared';
+import { GROUP_TYPE_HELP, GROUP_TYPE_PLURALS, type GroupDto } from '@wcc/shared';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, EmptyState, PageHeader, PageLoader } from '@/components/ui/misc';
-import { ChurchTabs, GroupFormDialog, PastorCard, RolePermissionsCard } from '@/components/church/church-ui';
+import { ChurchTabs, GroupFormDialog, PastorCard, RolePermissionsCard, useCreatableTypes } from '@/components/church/church-ui';
 import { useMe } from '@/lib/queries';
 import { formatDay, useGroups } from '@/lib/membership';
 import { cn } from '@/lib/utils';
@@ -26,7 +26,21 @@ function GroupCard({ g }: { g: GroupDto }) {
             {g.canAdminister ? <Badge tone="brand">Yours</Badge> : g.canManage ? <Badge tone="brand">Shepherding</Badge> : null}
           </div>
         </div>
+        {g.parent && <p className="text-xs text-muted">in {g.parent.name}</p>}
+        {g.type === 'CONSTITUENCY' && <p className="text-xs font-medium uppercase tracking-wide text-muted">Head pastor</p>}
         <PastorCard pastor={g.pastor} className="relative z-10 w-fit max-w-full" />
+        {g.type === 'BACENTA' && (g.lead || g.roles.length > 0) && (
+          <p className="truncate text-xs text-muted">
+            {g.lead ? `Team lead: ${g.lead.fullName}` : ''}
+            {g.lead && g.roles.length ? ' · ' : ''}
+            {g.roles.length ? `${g.roles.length} team${g.roles.length === 1 ? '' : 's'}` : ''}
+          </p>
+        )}
+        {g.type === 'CONSTITUENCY' && g.children.length > 0 && (
+          <p className="truncate text-xs text-muted">
+            {g.children.length} basonta{g.children.length === 1 ? '' : 's'}: {g.children.map((c) => c.name).join(', ')}
+          </p>
+        )}
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted">
           <span className="flex items-center gap-1">
             <Users className="h-3.5 w-3.5" /> {g.memberCount} member{g.memberCount === 1 ? '' : 's'}
@@ -43,7 +57,8 @@ function GroupCard({ g }: { g: GroupDto }) {
 export default function GroupsPage() {
   const me = useMe();
   const groups = useGroups();
-  const [tab, setTab] = useState<'CONSTITUENCY' | 'BASONTA'>('CONSTITUENCY');
+  const [tab, setTab] = useState<'CONSTITUENCY' | 'BASONTA' | 'BACENTA'>('CONSTITUENCY');
+  const creatable = useCreatableTypes();
   const [creating, setCreating] = useState(false);
   const p = me.data?.permissions;
   if (me.isLoading || groups.isLoading) return <PageLoader />;
@@ -53,9 +68,9 @@ export default function GroupsPage() {
     <>
       <PageHeader
         title="Church"
-        subtitle="Constituencies and basontas, their pastors and members."
+        subtitle="Constituencies and their basontas, and the church’s bacentas (ministries)."
         actions={
-          p.canCreateGroup && (
+          creatable.types.length > 0 && (
             <Button onClick={() => setCreating(true)}>
               <Plus className="h-4 w-4" /> New group
             </Button>
@@ -63,15 +78,16 @@ export default function GroupsPage() {
         }
       />
       <ChurchTabs />
-      <div className="mb-4 inline-flex rounded-lg border border-border bg-surface p-0.5 text-sm">
-        {(['CONSTITUENCY', 'BASONTA'] as const).map((t) => (
+      <p className="mb-2 text-sm text-muted">{GROUP_TYPE_HELP[tab]}</p>
+      <div className="mb-4 inline-flex max-w-full overflow-x-auto rounded-lg border border-border bg-surface p-0.5 text-sm">
+        {(['CONSTITUENCY', 'BASONTA', 'BACENTA'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={cn('rounded-md px-3 py-1.5 font-medium', tab === t ? 'bg-brand text-white' : 'text-muted hover:text-fg')}
             aria-pressed={tab === t}
           >
-            {GROUP_TYPE_LABELS[t]}s ({(groups.data ?? []).filter((g) => g.type === t).length})
+            {GROUP_TYPE_PLURALS[t]} ({(groups.data ?? []).filter((g) => g.type === t).length})
           </button>
         ))}
       </div>
@@ -82,8 +98,8 @@ export default function GroupsPage() {
           ))}
         </div>
       ) : (
-        <EmptyState icon={<Users className="h-8 w-8" />} title={`No ${GROUP_TYPE_LABELS[tab].toLowerCase()}s yet`}>
-          {p.canCreateGroup ? 'Create the first one with “New group”.' : 'A pastor or Super Admin can create one.'}
+        <EmptyState icon={<Users className="h-8 w-8" />} title={`No ${GROUP_TYPE_PLURALS[tab].toLowerCase()} yet`}>
+          {creatable.types.includes(tab) ? 'Create the first one with “New group”.' : tab === 'CONSTITUENCY' ? 'A Super Admin creates constituencies.' : tab === 'BASONTA' ? 'A constituency’s head pastor or a Super Admin adds basontas.' : 'A pastor or Super Admin can create one.'}
         </EmptyState>
       )}
       {p.canManageRolePermissions && (

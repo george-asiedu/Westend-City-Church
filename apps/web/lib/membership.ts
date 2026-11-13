@@ -20,7 +20,7 @@ export const mk = {
   summary: (params: Record<string, unknown>) => ['attendance', 'summary', params] as const,
 };
 
-export const useGroups = (type?: 'CONSTITUENCY' | 'BASONTA') =>
+export const useGroups = (type?: 'CONSTITUENCY' | 'BASONTA' | 'BACENTA') =>
   useQuery({ queryKey: mk.groups(type), queryFn: () => api<GroupDto[]>('/groups', { query: { type } }), staleTime: 30_000 });
 
 export const usePastors = (enabled = true) => useQuery({ queryKey: mk.pastors, queryFn: () => api<PastorDto[]>('/groups/pastors'), enabled, staleTime: 60_000 });
@@ -103,4 +103,15 @@ export function downloadCsv(filename: string, rows: Array<Array<string | number 
 /** Super Admins (or MANAGE_MEMBERSHIP), pastors and shepherds can add members. */
 export function canAddMembers(me: { role: string; permissions: { canManageMembership: boolean } }): boolean {
   return me.permissions.canManageMembership || me.role === 'PASTOR' || me.role === 'SHEPHERD';
+}
+
+/** Member-form defaults that put a new member into this group. */
+export function memberDefaultsFor(g: { id: string; type: 'CONSTITUENCY' | 'BASONTA' | 'BACENTA' } | null | undefined) {
+  if (!g) return undefined;
+  return g.type === 'CONSTITUENCY' ? { constituencyId: g.id } : g.type === 'BASONTA' ? { basontaId: g.id } : { bacentaIds: [g.id] };
+}
+
+/** "Media (Mixing, Live streaming)" */
+export function bacentaLabel(b: { name: string; roles: Array<{ name: string }> }): string {
+  return b.roles.length ? `${b.name} (${b.roles.map((r) => r.name).join(', ')})` : b.name;
 }

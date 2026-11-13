@@ -107,6 +107,17 @@ export interface MediaDto {
 
 // ---------------------------------------------------------------- Membership & attendance
 
+export type GroupTypeKey = 'CONSTITUENCY' | 'BASONTA' | 'BACENTA';
+export interface MemberRefDto {
+  id: string;
+  fullName: string;
+  phone: string | null;
+}
+export interface TeamRoleDto {
+  id: string;
+  name: string;
+}
+
 export interface PastorDto {
   id: string;
   fullName: string;
@@ -117,7 +128,7 @@ export interface PastorDto {
 
 export interface GroupDto {
   id: string;
-  type: 'CONSTITUENCY' | 'BASONTA';
+  type: GroupTypeKey;
   name: string;
   description: string | null;
   meetingDay: string | null;
@@ -125,6 +136,14 @@ export interface GroupDto {
   isActive: boolean;
   pastor: PastorDto | null;
   shepherds: PastorDto[];
+  /** A basonta's constituency (and its head pastor). */
+  parent: { id: string; name: string; pastor: PastorDto | null } | null;
+  /** A constituency's basontas. */
+  children: Array<{ id: string; name: string; pastor: string | null; memberCount: number }>;
+  /** A bacenta's team roles, with how many members hold each and the team's lead. */
+  roles: Array<TeamRoleDto & { memberCount: number; lead: MemberRefDto | null }>;
+  /** A bacenta's overall team lead. */
+  lead: MemberRefDto | null;
   memberCount: number;
   lastMeeting: { id: string; date: string; present: number } | null;
   /** Take attendance and manage members (pastor, shepherds, admins). */
@@ -146,7 +165,8 @@ export interface MemberDto {
   isActive: boolean;
   notes: string | null;
   constituency: { id: string; name: string } | null;
-  basontas: Array<{ id: string; name: string }>;
+  basonta: { id: string; name: string } | null;
+  bacentas: Array<{ id: string; name: string; roles: TeamRoleDto[] }>;
   lastSeen: string | null;
   canEdit: boolean;
 }
@@ -167,7 +187,7 @@ export interface SessionInfoDto {
   serviceType: string;
   title: string | null;
   date: string;
-  group: { id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' } | null;
+  group: { id: string; name: string; type: GroupTypeKey } | null;
   visitorCount: number;
   firstTimerCount: number;
   notes: string | null;
@@ -177,7 +197,7 @@ export interface SessionInfoDto {
 
 export interface AttendanceSheetDto {
   session: SessionInfoDto;
-  roster: Array<{ id: string; fullName: string; churchRole: string; constituency: string | null; constituencyId: string | null }>;
+  roster: Array<{ id: string; fullName: string; churchRole: string; constituency: string | null; constituencyId: string | null; teamRoles: TeamRoleDto[] }>;
   presentIds: string[];
   /** memberId → people brought (0 = nobody); missing = not recorded */
   brought: Record<string, number>;
@@ -191,7 +211,7 @@ export interface SessionRowDto {
   serviceType: string;
   title: string | null;
   date: string;
-  group: { id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' } | null;
+  group: { id: string; name: string; type: GroupTypeKey } | null;
   present: number;
   visitors: number;
   firstTimers: number;
@@ -216,9 +236,10 @@ export interface AttendanceSummaryDto {
   serviceTypes: Array<{ serviceType: string; sessions: number; averagePresent: number }>;
   constituencies: Array<{ id: string; name: string; members: number }>;
   basontas: Array<{ id: string; name: string; members: number }>;
+  bacentas: Array<{ id: string; name: string; members: number }>;
   groups: Array<{
     id: string;
-    type: 'CONSTITUENCY' | 'BASONTA';
+    type: GroupTypeKey;
     name: string;
     pastor: string | null;
     members: number;
@@ -238,6 +259,8 @@ export interface GroupStatsDto {
   averagePresent: number;
   lastMeeting: { id: string; date: string; present: number; absent: number } | null;
   roles: Array<{ role: string; count: number }>;
+  /** Bacentas: members per team role (plus "No role yet"). */
+  teamRoles: Array<{ id: string | null; name: string; count: number }>;
   guests: { visit: number; joining: number; converted: number };
   /** Group members at church-wide services in the period */
   churchServices: { sessions: number; averagePresent: number };
@@ -253,6 +276,6 @@ export interface LeaderDto {
   status: string;
   createdAt: string;
   lastLoginAt: string | null;
-  leads: Array<{ id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' }>;
-  shepherds: Array<{ id: string; name: string; type: 'CONSTITUENCY' | 'BASONTA' }>;
+  leads: Array<{ id: string; name: string; type: GroupTypeKey }>;
+  shepherds: Array<{ id: string; name: string; type: GroupTypeKey }>;
 }

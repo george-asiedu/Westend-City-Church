@@ -23,6 +23,8 @@ export interface GroupRef {
   pastorId: string | null;
   createdById: string | null;
   shepherdIds?: string[];
+  /** For a basonta: its constituency's head pastor. */
+  parentPastorId?: string | null;
 }
 
 /**
@@ -167,8 +169,21 @@ export class PolicyService {
     return this.isMembershipAdmin(u) || this.isLeader(u);
   }
 
+  /** The group's pastor, whoever created it, or (for a basonta) its constituency's head pastor. */
   private leadsGroup(u: Principal, g: GroupRef): boolean {
-    return u.role === 'PASTOR' && (g.pastorId === u.id || g.createdById === u.id);
+    return u.role === 'PASTOR' && (g.pastorId === u.id || g.createdById === u.id || (!!g.parentPastorId && g.parentPastorId === u.id));
+  }
+
+  /**
+   * Constituencies: Super Admin. Basontas: the constituency's head pastor or Super Admin.
+   * Bacentas (ministries): any pastor (who then leads it) or Super Admin.
+   */
+  canCreateGroupOfType(u: Principal, type: 'CONSTITUENCY' | 'BASONTA' | 'BACENTA', parent?: { pastorId: string | null } | null): boolean {
+    if (this.isMembershipAdmin(u)) return true;
+    if (u.role !== 'PASTOR') return false;
+    if (type === 'BACENTA') return true;
+    if (type === 'BASONTA') return !!parent && parent.pastorId === u.id;
+    return false;
   }
 
   /** Take attendance and manage members: the pastor, its shepherds, admins. */

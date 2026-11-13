@@ -421,6 +421,7 @@ model RolePermission {
 enum GroupType {
   CONSTITUENCY
   BASONTA
+  BACENTA
 }
 
 enum AttendanceKind {
@@ -433,29 +434,40 @@ enum GuestIntent {
   JOINING
 }
 
-/// A constituency (where members belong) or a basonta (ministry). Led by a pastor (an app user).
+/// Constituency (led by a head pastor) → basontas inside it; bacentas are church-wide
+/// ministries (media, choir, ushers…). Each is led by a pastor (an app user).
 model ChurchGroup {
-  id           String    @id @default(uuid()) @db.Uuid
+  id           String        @id @default(uuid()) @db.Uuid
   type         GroupType
-  name         String    @db.VarChar(80)
-  description  String?   @db.VarChar(500)
-  meetingDay   String?   @db.VarChar(40)
-  meetingPlace String?   @db.VarChar(160)
-  pastorId     String?   @db.Uuid
-  pastor       User?     @relation("GroupPastor", fields: [pastorId], references: [id], onDelete: SetNull)
-  createdById  String?   @db.Uuid
-  createdBy    User?     @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  name         String        @db.VarChar(80)
+  description  String?       @db.VarChar(500)
+  meetingDay   String?       @db.VarChar(40)
+  meetingPlace String?       @db.VarChar(160)
+  pastorId     String?       @db.Uuid
+  pastor       User?         @relation("GroupPastor", fields: [pastorId], references: [id], onDelete: SetNull)
+  createdById  String?       @db.Uuid
+  createdBy    User?         @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  /// A basonta's constituency.
+  parentId     String?       @db.Uuid
+  parent       ChurchGroup?  @relation("GroupParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children     ChurchGroup[] @relation("GroupParent")
+  /// A bacenta\'s overall team lead (a member).
+  leadMemberId String?       @db.Uuid
+  leadMember   Member?       @relation("GroupLead", fields: [leadMemberId], references: [id], onDelete: SetNull)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  members   Member[]            @relation("MemberConstituency")
-  basonta   MemberBasonta[]
-  sessions  AttendanceSession[]
-  shepherds GroupShepherd[]
+  members        Member[]            @relation("MemberConstituency")
+  basontaMembers Member[]            @relation("MemberBasonta")
+  bacentaMembers MemberBacenta[]
+  roles          BacentaRole[]
+  sessions       AttendanceSession[]
+  shepherds      GroupShepherd[]
 
   @@unique([type, name])
   @@index([pastorId])
+  @@index([parentId])
 }
 
 /// A church member (not an app login).
@@ -470,6 +482,9 @@ model Member {
   churchRole     String       @default("Member") @db.VarChar(60)
   constituencyId String?      @db.Uuid
   constituency   ChurchGroup? @relation("MemberConstituency", fields: [constituencyId], references: [id], onDelete: SetNull)
+  /// One basonta, inside their constituency.
+  basontaId      String?      @db.Uuid
+  basonta        ChurchGroup? @relation("MemberBasonta", fields: [basontaId], references: [id], onDelete: SetNull)
   joinedOn       DateTime?    @db.Date
   isActive       Boolean      @default(true)
   notes          String?      @db.VarChar(1000)
@@ -478,23 +493,55 @@ model Member {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  basontas      MemberBasonta[]
+  bacentas      MemberBacenta[]
+  leadsGroups   ChurchGroup[]      @relation("GroupLead")
+  leadsTeams    BacentaRole[]      @relation("TeamLead")
   attendance    AttendanceRecord[]
   guestsBrought Guest[]            @relation("GuestBroughtBy")
   convertedFrom Guest?             @relation("GuestConverted")
 
   @@index([constituencyId])
+  @@index([basontaId])
   @@index([fullName])
 }
 
-model MemberBasonta {
-  memberId String      @db.Uuid
-  member   Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  groupId  String      @db.Uuid
-  group    ChurchGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+/// A member serving in a bacenta (any number), with team roles inside it.
+model MemberBacenta {
+  memberId String              @db.Uuid
+  member   Member              @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  groupId  String              @db.Uuid
+  group    ChurchGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  roles    MemberBacentaRole[]
 
   @@id([memberId, groupId])
   @@index([groupId])
+}
+
+/// A team role defined by a bacenta (e.g. Media: mixing, projecting, live streaming).
+model BacentaRole {
+  id        String              @id @default(uuid()) @db.Uuid
+  groupId   String              @db.Uuid
+  group     ChurchGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name      String              @db.VarChar(60)
+  /// Team lead for this role (a member of the bacenta).
+  leadId    String?             @db.Uuid
+  lead      Member?             @relation("TeamLead", fields: [leadId], references: [id], onDelete: SetNull)
+  sortOrder Int                 @default(0)
+  createdAt DateTime            @default(now())
+  members   MemberBacentaRole[]
+
+  @@unique([groupId, name])
+}
+
+model MemberBacentaRole {
+  memberId   String        @db.Uuid
+  groupId    String        @db.Uuid
+  membership MemberBacenta @relation(fields: [memberId, groupId], references: [memberId, groupId], onDelete: Cascade)
+  roleId     String        @db.Uuid
+  role       BacentaRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, groupId, roleId])
+  @@index([roleId])
 }
 
 /// A church-wide service (groupId null) or a group meeting, on a date. serviceType is

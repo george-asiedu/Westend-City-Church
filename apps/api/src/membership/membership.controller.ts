@@ -34,6 +34,26 @@ class GroupDto {
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(40) meetingDay?: string | null;
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(160) meetingPlace?: string | null;
   @IsOptional() @ValidateIf(nullable) @IsUUID() pastorId?: string | null;
+  @IsOptional() @IsUUID() parentId?: string;
+}
+class RoleDto {
+  @IsString() @MinLength(1) @MaxLength(60) name!: string;
+  @IsOptional() @ValidateIf(nullable) @IsUUID() leadId?: string | null;
+}
+class UpdateRoleDto {
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(60) name?: string;
+  @IsOptional() @ValidateIf(nullable) @IsUUID() leadId?: string | null;
+}
+class AddMemberDto {
+  @IsUUID() memberId!: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @IsUUID('4', { each: true }) roleIds?: string[];
+}
+class RoleIdsDto {
+  @IsArray() @ArrayMaxSize(30) @IsUUID('4', { each: true }) roleIds!: string[];
+}
+class BacentaInputDto {
+  @IsUUID() groupId!: string;
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @IsUUID('4', { each: true }) roleIds?: string[];
 }
 class UpdateGroupDto {
   @IsOptional() @IsString() @MinLength(2) @MaxLength(80) name?: string;
@@ -42,6 +62,8 @@ class UpdateGroupDto {
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(160) meetingPlace?: string | null;
   @IsOptional() @ValidateIf(nullable) @IsUUID() pastorId?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() @IsUUID() parentId?: string;
+  @IsOptional() @ValidateIf(nullable) @IsUUID() leadMemberId?: string | null;
 }
 class GroupQuery {
   @IsOptional() @IsEnum(GroupType) type?: GroupType;
@@ -56,7 +78,8 @@ class MemberDto {
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(160) location?: string | null;
   @IsOptional() @IsString() @MinLength(2) @MaxLength(60) churchRole?: string;
   @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @IsUUID() constituencyId?: string | null;
-  @IsOptional() @IsArray() @ArrayMaxSize(30) @IsUUID('4', { each: true }) basontaIds?: string[];
+  @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @IsUUID() basontaId?: string | null;
+  @IsOptional() @IsArray() @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => BacentaInputDto) bacentas?: BacentaInputDto[];
   @IsOptional() @ValidateIf((_, v) => v !== null && v !== '') @Matches(DATE) joinedOn?: string | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @ValidateIf(nullable) @IsString() @MaxLength(1000) notes?: string | null;
@@ -72,7 +95,9 @@ class ShepherdDto {
 class MemberQuery {
   @IsOptional() @IsString() @MaxLength(100) q?: string;
   @IsOptional() @ValidateIf((_, v) => v !== 'none') @IsUUID() constituencyId?: string;
-  @IsOptional() @IsUUID() basontaId?: string;
+  @IsOptional() @ValidateIf((_, v) => v !== 'none') @IsUUID() basontaId?: string;
+  @IsOptional() @IsUUID() bacentaId?: string;
+  @IsOptional() @IsUUID() teamRoleId?: string;
   @IsOptional() @IsString() @MaxLength(60) churchRole?: string;
   @IsOptional() @IsIn(['active', 'inactive', 'all']) status?: 'active' | 'inactive' | 'all';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
@@ -159,6 +184,38 @@ export class GroupsController {
   @Delete(':id/shepherds/:userId')
   removeShepherd(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('userId', ParseUUIDPipe) userId: string, @Meta() meta: ReqMeta) {
     return this.svc.removeShepherd(user, id, userId, meta);
+  }
+
+  @Post(':id/roles')
+  createRole(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RoleDto, @Meta() meta: ReqMeta) {
+    return this.svc.createRole(user, id, dto, meta);
+  }
+
+  @Patch(':id/roles/:roleId')
+  updateRole(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('roleId', ParseUUIDPipe) roleId: string, @Body() dto: UpdateRoleDto, @Meta() meta: ReqMeta) {
+    return this.svc.updateRole(user, id, roleId, dto, meta);
+  }
+
+  @Delete(':id/roles/:roleId')
+  deleteRole(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('roleId', ParseUUIDPipe) roleId: string, @Meta() meta: ReqMeta) {
+    return this.svc.deleteRole(user, id, roleId, meta);
+  }
+
+  /** Add an existing member to this group. */
+  @Post(':id/members')
+  addMember(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AddMemberDto, @Meta() meta: ReqMeta) {
+    return this.svc.addToGroup(user, id, dto.memberId, dto.roleIds, meta);
+  }
+
+  @Put(':id/members/:memberId/roles')
+  setRoles(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('memberId', ParseUUIDPipe) memberId: string, @Body() dto: RoleIdsDto, @Meta() meta: ReqMeta) {
+    return this.svc.setMemberRoles(user, id, memberId, dto.roleIds, meta);
+  }
+
+  @Delete(':id/members/:memberId')
+  @HttpCode(204)
+  async removeMember(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('memberId', ParseUUIDPipe) memberId: string, @Meta() meta: ReqMeta) {
+    await this.svc.removeFromGroup(user, id, memberId, meta);
   }
 
   @Post()

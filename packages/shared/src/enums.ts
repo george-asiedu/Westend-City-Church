@@ -78,7 +78,21 @@ export const MEETING_TYPE_SUGGESTIONS = ['Meeting', 'Rehearsal', 'Prayer meeting
 export const GUEST_INTENT_LABELS = { VISIT: 'Just visiting', JOINING: 'Wants to join' } as const;
 export type GuestIntent = keyof typeof GUEST_INTENT_LABELS;
 
-export const GROUP_TYPE_LABELS = { CONSTITUENCY: 'Constituency', BASONTA: 'Basonta' } as const;
+export const GROUP_TYPE_LABELS = { CONSTITUENCY: 'Constituency', BASONTA: 'Basonta', BACENTA: 'Bacenta' } as const;
+export const GROUP_TYPE_PLURALS = { CONSTITUENCY: 'Constituencies', BASONTA: 'Basontas', BACENTA: 'Bacentas' } as const;
+/** One-line explanations shown in forms. */
+export const GROUP_TYPE_HELP = {
+  CONSTITUENCY: 'Led by a head pastor; has basontas under it. Every member belongs to one.',
+  BASONTA: 'Inside a constituency. Every member belongs to one basonta.',
+  BACENTA: 'A church ministry such as media, choir or ushers. Members can serve in several, each with team roles.',
+} as const;
+/** Starter team roles offered when a bacenta has none yet. */
+export const BACENTA_ROLE_SUGGESTIONS: Record<string, string[]> = {
+  media: ['Mixing', 'Projection', 'Camera', 'Live streaming', 'Social media', 'Photography'],
+  choir: ['Soprano', 'Alto', 'Tenor', 'Bass', 'Instrumentalist', 'Choir director'],
+  ushers: ['Door', 'Seating', 'Offering', 'Protocol'],
+  dancing: ['Dancer', 'Choreographer', 'Costumes'],
+};
 export type GroupType = keyof typeof GROUP_TYPE_LABELS;
 /** Suggestions only; any text is allowed. */
 export const CHURCH_ROLE_SUGGESTIONS = [
