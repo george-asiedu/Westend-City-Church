@@ -63,7 +63,7 @@ function LoginForm() {
   return (
     <Card className="p-6">
       <h1 className="mb-1 text-xl font-semibold">Sign in</h1>
-      <p className="mb-6 text-sm text-muted">Invite-only access for the church media team and pastors.</p>
+      <p className="mb-6 text-sm text-muted">For the Westend City Church family.</p>
       <form onSubmit={submit} className="space-y-4">
         {!needTotp ? (
           <>

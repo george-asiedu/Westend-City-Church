@@ -89,9 +89,11 @@ export default function LeadersPage() {
                     <Phone className="h-4 w-4 shrink-0" /> {l.phone}
                   </a>
                 )}
-                <a href={`mailto:${l.email}`} className="flex min-w-0 items-center gap-2 text-brand hover:underline">
-                  <Mail className="h-4 w-4 shrink-0" /> <span className="truncate">{l.email}</span>
-                </a>
+                {l.email && (
+                  <a href={`mailto:${l.email}`} className="flex min-w-0 items-center gap-2 text-brand hover:underline">
+                    <Mail className="h-4 w-4 shrink-0" /> <span className="truncate">{l.email}</span>
+                  </a>
+                )}
               </div>
               <div className="space-y-1.5 border-t border-border pt-3 text-sm">
                 {l.leads.length > 0 && (

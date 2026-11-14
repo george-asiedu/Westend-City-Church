@@ -84,9 +84,11 @@ export function PastorCard({ pastor, className }: { pastor: PastorDto | null; cl
           <Phone className="h-4 w-4 shrink-0" /> {pastor.phone}
         </a>
       )}
-      <a href={`mailto:${pastor.email}`} className="flex min-w-0 items-center gap-2 text-brand hover:underline">
-        <Mail className="h-4 w-4 shrink-0" /> <span className="truncate">{pastor.email}</span>
-      </a>
+      {pastor.email && (
+        <a href={`mailto:${pastor.email}`} className="flex min-w-0 items-center gap-2 text-brand hover:underline">
+          <Mail className="h-4 w-4 shrink-0" /> <span className="truncate">{pastor.email}</span>
+        </a>
+      )}
     </div>
   );
 }
