@@ -7,7 +7,8 @@ import type { AuthUser } from '../common/auth-user';
 import { UploadsService } from './uploads.service';
 
 class InitFileDto {
-  @IsString() @MaxLength(100) clientId!: string;
+  // Uppy's file id (echoed back, never stored): it includes the file name, so allow as much as filenames.
+  @IsString() @MaxLength(1000) clientId!: string;
   @IsString() @MaxLength(1000) filename!: string;
   @IsInt() @Min(1) size!: number;
   @IsString() @MaxLength(100) mimeType!: string;
